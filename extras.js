@@ -68,23 +68,45 @@ async function aiGenerate(siteId, blocks, st, draw) {
   st('تمت إضافة ' + add.length + ' عنصر. راجعهم واضغط حفظ.');
 }
 
-// ====== الاشتراك والدفع (Paymob عن طريق Edge Function اسمها create-payment) ======
+// ====== الاشتراك: دفع يدوي بفودافون كاش، والتفعيل بيتم من لوحة الأدمن ======
+const planLabel = p => p === 'yearly' ? 'سنوي' : 'شهري';
+const planPrice = p => p === 'yearly' ? C.PRICE_YEARLY : C.PRICE_MONTHLY;
+
 const payHtml = () =>
   '<h2>الاشتراك</h2><div class="pay"><button type="button" class="btn" data-pay="monthly">اشترك شهري: ' + esc(C.PRICE_MONTHLY) +
   '</button> <button type="button" class="btn" data-pay="yearly">اشترك سنوي: ' + esc(C.PRICE_YEARLY) +
-  '</button></div><p class="hint">الدفع بالبطاقة عبر Paymob، واشتراكك بيتفعّل تلقائياً بعد نجاح الدفع.</p>';
+  '</button></div><div id="pay-info"></div>';
 
-async function startPay(plan, btn) {
-  btn.disabled = true;
-  const { data, error } = await sb.functions.invoke('create-payment', { body: { plan, return_url: location.origin + location.pathname + '#/dashboard' } });
-  if (error || !data || typeof data.url !== 'string' || !data.url.startsWith('https://eg.checkout.paymob.com/')) {
-    btn.disabled = false;
-    let code = '';
-    try { code = (await error.context.json()).error; } catch {}
-    alert(code === 'phone_required' ? 'رقم هاتفك مش مسجّل في حسابك.' : code === 'not_configured' ? 'الدفع لسه مش مفعّل من إدارة المنصة.' : 'تعذر بدء الدفع. جرّب تاني.');
-    return;
-  }
-  location.href = data.url;
+function startPay(plan, btn) {
+  const box = document.getElementById('pay-info'); if (!box) return;
+  const cash = String(C.VODAFONE_CASH || '').trim();
+  const wa = String(C.WHATSAPP || '').replace(/[^0-9]/g, '');
+  if (!cash || !wa) { box.innerHTML = '<p class="msg">طريقة الدفع لسه مش مجهزة من الإدارة.</p>'; return; }
+  const text = 'السلام عليكم، حولت اشتراك ' + planLabel(plan) + ' (' + planPrice(plan) + ') على فودافون كاش.\n' +
+    'الاسم: ' + (me.full_name || '') + '\nالبريد: ' + (me.email || '') + '\nالهاتف: ' + (me.phone || '');
+  const link = 'https://wa.me/' + wa + '?text=' + encodeURIComponent(text);
+  box.innerHTML =
+    '<div style="border:1px solid var(--line);background:#fff;border-radius:8px;padding:18px;margin:14px 0;max-width:520px">' +
+    '<h3 style="margin:0 0 10px">اشتراك ' + planLabel(plan) + ': ' + esc(planPrice(plan)) + '</h3>' +
+    '<ol style="margin:0 0 12px;padding-inline-start:20px">' +
+    '<li>حوّل <b>' + esc(planPrice(plan)) + '</b> على فودافون كاش للرقم:<br><b dir="ltr" style="font-size:1.3rem">' + esc(cash) + '</b></li>' +
+    '<li>اكتب رقم الموبايل اللي حوّلت منه تحت واضغط إرسال.</li></ol>' +
+    '<form id="rq" style="display:grid;gap:10px">' +
+    '<label>رقم الموبايل اللي حوّلت منه<input name="sender" type="tel" required minlength="8" maxlength="20"></label>' +
+    '<label>ملاحظة (اختياري)<input class="rtl" name="note" maxlength="200"></label>' +
+    '<button class="btn">تم التحويل، ابعت الطلب</button><div class="msg" role="alert"></div></form>' +
+    '<p class="hint" style="margin-top:10px">تقدر كمان تبعت صورة التحويل على واتساب: <a href="' + esc(link) + '" target="_blank" rel="noopener">فتح واتساب</a></p>' +
+    '<p class="hint">سيتم الرد عليك وتفعيل اشتراكك خلال 24 ساعة من وصول التحويل.</p></div>';
+  const f = box.querySelector('#rq'), msg = f.querySelector('.msg'), go = f.querySelector('button');
+  f.onsubmit = async ev => {
+    ev.preventDefault(); msg.className = 'msg'; msg.textContent = ''; go.disabled = true;
+    const fd = new FormData(f);
+    const { error } = await sb.rpc('request_subscription', { p_plan: plan, p_sender: fd.get('sender').trim(), p_note: fd.get('note').trim() });
+    go.disabled = false;
+    if (error) { msg.textContent = /too_many_pending/.test(error.message || '') ? 'عندك طلبات لسه تحت المراجعة. استنى الرد عليها.' : 'تعذر إرسال الطلب. جرّب تاني.'; return; }
+    f.reset(); msg.className = 'msg ok'; msg.textContent = 'تم استلام طلبك. هنراجع التحويل ونفعّل اشتراكك خلال 24 ساعة.';
+  };
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ====== الدومين الخاص: لو الزائر داخل من دومين مربوط بموقع، نعرض الموقع على طول ======

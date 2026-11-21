@@ -163,16 +163,25 @@ async function editSite(m, id) {
 
 async function admin(m) {
   if (!me || me.role !== 'super_admin') { location.hash = '#/'; return; }
-  const [u, st] = await Promise.all([
+  const [u, st, pr] = await Promise.all([
     sb.from('profiles').select('*').order('created_at', { ascending: false }),
-    sb.from('sites').select('*').order('created_at', { ascending: false })
+    sb.from('sites').select('*').order('created_at', { ascending: false }),
+    sb.from('payment_requests').select('*').eq('status', 'pending').order('created_at', { ascending: true })
   ]);
   if (u.error || st.error) { m.innerHTML = '<section class="wrap"><div class="msg">' + esc((u.error || st.error).message) + '</div></section>'; return; }
   const users = u.data, sites = st.data, email = {};
   users.forEach(x => email[x.id] = x.email);
+  const reqs = pr && !pr.error ? pr.data : [], byId = {};
+  users.forEach(x => byId[x.id] = x);
+  const reqHtml = '<h2>طلبات الاشتراك (' + reqs.length + ')</h2>' + (pr && pr.error ? '<p class="msg">تأكد إنك شغّلت SQL طلبات الاشتراك.</p>' : reqs.length ?
+    '<div class="tbl"><table><tr><th>التاريخ</th><th>العميل</th><th>الهاتف</th><th>الباقة</th><th>المبلغ</th><th>حوّل من رقم</th><th>ملاحظة</th><th>إجراءات</th></tr>' +
+    reqs.map(x => { const w = byId[x.user_id] || {}, y = x.plan === 'yearly';
+      return '<tr><td>' + new Date(x.created_at).toLocaleString('ar-EG') + '</td><td>' + esc(w.full_name) + '<br><small dir="ltr">' + esc(w.email) + '</small></td><td dir="ltr">' + esc(w.phone) + '</td><td>' + (y ? 'سنوي' : 'شهري') + '</td><td>' + esc(x.amount) + ' جنيه</td><td dir="ltr">' + esc(x.sender_phone) + '</td><td style="white-space:normal">' + esc(x.note) + '</td><td class="act"><button class="btn sm" data-a="rok" data-id="' + esc(x.id) + '" data-u="' + esc(x.user_id) + '" data-p="' + (y ? 'yearly' : 'monthly') + '" data-d="' + (y ? 365 : 30) + '">تفعيل</button><button class="btn sm warn" data-a="rno" data-id="' + esc(x.id) + '">رفض</button></td></tr>'; }).join('') + '</table></div>'
+    : '<p>مفيش طلبات جديدة.</p>');
   const paid = users.filter(x => x.plan !== 'trial' && x.plan_ends_at && daysLeft(x.plan_ends_at) > 0).length;
   m.innerHTML = '<section class="wrap" style="max-width:1200px"><h1>لوحة الأدمن</h1><div class="stats"><div>المستخدمين: <b>' + users.length + '</b></div><div>مشتركين حالياً: <b>' + paid + '</b></div><div>معطّلين: <b>' + users.filter(x => x.is_disabled).length + '</b></div><div>المواقع: <b>' + sites.length + '</b></div></div><div class="msg" id="amsg" role="alert"></div>' +
-    '<h2>المستخدمين</h2><div class="tbl"><table><tr><th>الاسم</th><th>البريد</th><th>الهاتف</th><th>الباقة</th><th>الحالة</th><th>تاريخ التسجيل</th><th>إجراءات</th></tr>' +
+    reqHtml +
+    '<h2 style="margin-top:32px">المستخدمين</h2><div class="tbl"><table><tr><th>الاسم</th><th>البريد</th><th>الهاتف</th><th>الباقة</th><th>الحالة</th><th>تاريخ التسجيل</th><th>إجراءات</th></tr>' +
     users.map(x => '<tr><td>' + esc(x.full_name) + '</td><td dir="ltr">' + esc(x.email) + '</td><td dir="ltr">' + esc(x.phone) + '</td><td>' + planName(x.plan) + (x.role === 'super_admin' ? ' (أدمن)' : '') + '</td><td>' + esc(status(x).text) + (x.is_disabled ? ' - معطّل' : '') + '</td><td>' + new Date(x.created_at).toLocaleDateString('ar-EG') + '</td><td class="act">' +
     (x.id === me.id ? '' : '<button class="btn sm ' + (x.is_disabled ? '' : 'warn') + '" data-a="dis" data-id="' + x.id + '" data-v="' + !x.is_disabled + '">' + (x.is_disabled ? 'تفعيل الحساب' : 'تعطيل') + '</button>') +
     '<button class="btn sm" data-a="plan" data-id="' + x.id + '" data-p="monthly" data-d="30">شهري 30 يوم</button><button class="btn sm" data-a="plan" data-id="' + x.id + '" data-p="yearly" data-d="365">سنوي 365 يوم</button><button class="btn sm ghost" data-a="plan" data-id="' + x.id + '" data-p="trial" data-d="3">تجربة +3 أيام</button></td></tr>').join('') + '</table></div>' +
@@ -184,6 +193,11 @@ async function admin(m) {
     const a = b.dataset.a; let r;
     if (a === 'dis') r = await sb.rpc('admin_set_disabled', { target: b.dataset.id, disabled: b.dataset.v === 'true' });
     else if (a === 'plan') r = await sb.rpc('admin_set_plan', { target: b.dataset.id, new_plan: b.dataset.p, days: +b.dataset.d });
+    else if (a === 'rok') {
+      r = await sb.rpc('admin_set_plan', { target: b.dataset.u, new_plan: b.dataset.p, days: +b.dataset.d });
+      if (!r.error) r = await sb.from('payment_requests').update({ status: 'approved', handled_at: new Date().toISOString() }).eq('id', b.dataset.id);
+    }
+    else if (a === 'rno') r = await sb.from('payment_requests').update({ status: 'rejected', handled_at: new Date().toISOString() }).eq('id', b.dataset.id);
     else if (a === 'site') r = await sb.rpc('admin_set_site_status', { target: b.dataset.id, new_status: b.dataset.s });
     else if (a === 'sdel') { if (!confirm('حذف الموقع نهائياً؟')) return; r = await sb.from('sites').delete().eq('id', b.dataset.id); }
     else return;
