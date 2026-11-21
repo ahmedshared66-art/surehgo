@@ -22,8 +22,10 @@ function status(p) {
     const d = daysLeft(p.trial_ends_at);
     return d > 0 ? {ok:true, text:'متبقي ' + arDays(d) + ' من التجربة المجانية'} : {ok:false, text:'انتهت التجربة المجانية'};
   }
+  if (p.plan === 'cancelled') return {ok:false, text:'الاشتراك ملغي'};
+  const custom = (window.APP_PLANS || []).find(x => x.id === p.subscription_plan_id);
   const d = p.plan_ends_at ? daysLeft(p.plan_ends_at) : 0;
-  return d > 0 ? {ok:true, text:'الاشتراك ' + planName(p.plan) + ': متبقي ' + arDays(d)} : {ok:false, text:'انتهى الاشتراك ' + planName(p.plan)};
+  return d > 0 ? {ok:true, text:'الاشتراك ' + (custom ? custom.name : planName(p.plan)) + ': متبقي ' + arDays(d)} : {ok:false, text:'انتهى الاشتراك ' + (custom ? custom.name : planName(p.plan))};
 }
 
 async function loadMe() {
@@ -57,16 +59,21 @@ const FEATURES = [
 ];
 
 function home(m) {
+  const settings = window.APP_SETTINGS || {}, trialDays = Number(settings.trial_days || 3), trialSites = Number(settings.trial_sites || 3);
   const catalog = Array.isArray(window.APP_PLANS) ? window.APP_PLANS.filter(p => p.active) : [];
+  let cards = []; try { cards = JSON.parse(settings.home_cards || '[]'); } catch {}
+  if (!Array.isArray(cards)) cards = [];
+  const safeHref = x => /^(#\/|https:\/\/|mailto:|tel:)/i.test(String(x || '')) ? String(x) : '#/signup';
   const planRows = catalog.length ? catalog.map(p => '<tr><td><b>' + esc(p.name) + '</b><br><small>' + esc(p.description) + '</small></td><td>' + (p.original_price > p.price ? '<s>' + esc(p.original_price) + '</s> <b>' + esc(p.price) + ' جنيه</b> <span class="discount">خصم ' + esc(p.discount_percent) + '%</span>' : esc(p.price) + ' جنيه') + '</td><td>' + esc(p.duration_days) + ' يوم</td><td>' + (p.max_sites === -1 ? 'مواقع غير محدودة' : esc(p.max_sites) + ' مواقع') + '<br>' + (p.max_products === -1 ? 'منتجات غير محدودة' : esc(p.max_products) + ' منتج') + '</td></tr>').join('') :
     '<tr><td><b>الشهرية</b></td><td>' + esc(C.PRICE_MONTHLY) + '</td><td>30 يوم</td><td>حسب الباقة</td></tr><tr><td><b>السنوية</b></td><td>' + esc(C.PRICE_YEARLY) + '</td><td>365 يوم</td><td>حسب الباقة</td></tr>';
   m.innerHTML =
-  '<section class="hero"><div><span class="badge">3 أيام مجاناً</span><h1>' + esc((window.APP_SETTINGS || {}).hero_title || 'موقعك على الإنترنت في دقائق') + '</h1><p>' + esc((window.APP_SETTINGS || {}).hero_text || 'اختار نوع نشاطك، وابني موقعك بالسحب والإفلات أو بالذكاء الاصطناعي. من غير برمجة.') + '</p><a class="btn" href="' + (me ? '#/dashboard' : '#/signup') + '">إنشاء موقع</a></div>' +
-  '<div class="frame" aria-hidden="true"><div class="bar"></div><div class="body"><i class="h"></i><i></i><i class="s"></i><div class="drag"></div><div class="row"><i></i><i></i><i></i></div></div></div></section>' +
+  '<section class="hero home-' + (settings.home_layout === 'center' ? 'center' : 'split') + '"><div><span class="badge">' + esc(trialDays) + ' أيام مجاناً</span><h1>' + esc(settings.hero_title || 'موقعك على الإنترنت في دقائق') + '</h1><p>' + esc(settings.hero_text || 'اختار نوع نشاطك، وابني موقعك بالسحب والإفلات أو بالذكاء الاصطناعي. من غير برمجة.') + '</p><a class="btn" href="' + esc(safeHref(settings.home_cta_url || (me ? '#/dashboard' : '#/signup'))) + '">' + esc(settings.home_cta_text || 'إنشاء موقع') + '</a></div>' +
+  (settings.hero_image && /^https:\/\/[^\s"'()<>\\]+$/i.test(settings.hero_image) ? '<img class="home-hero-image" src="' + esc(settings.hero_image) + '" alt="معاينة مواقع" loading="lazy">' : '<div class="frame" aria-hidden="true"><div class="bar"></div><div class="body"><i class="h"></i><i></i><i class="s"></i><div class="drag"></div><div class="row"><i></i><i></i><i></i></div></div></div>') + '</section>' +
+  (cards.length ? '<section class="home-cards">' + cards.filter(x => x && (x.title || x.image)).map(x => '<article class="home-card">' + (x.image && /^https:\/\//i.test(x.image) ? '<img src="' + esc(x.image) + '" alt="" loading="lazy">' : '') + '<div><h2>' + esc(x.title) + '</h2><p>' + esc(x.text) + '</p>' + (x.button ? '<a class="btn" href="' + esc(safeHref(x.url)) + '">' + esc(x.button) + '</a>' : '') + '</div></article>').join('') + '</section>' : '') +
   '<div class="wrap"><section><h2>اختار نوع موقعك</h2><ul class="types">' + TYPES.map(t => '<li><a href="' + (me ? '#/dashboard' : '#/signup') + '">' + t + '</a></li>').join('') + '</ul></section>' +
   '<section class="sec"><h2>المميزات</h2><ul class="feat">' + FEATURES.map(f => '<li><b>' + f[0] + '</b><span>' + f[1] + '</span></li>').join('') + '</ul></section>' +
   '<section class="sec"><h2>الباقات</h2><div class="tbl"><table class="plans"><tr><th>الباقة</th><th>السعر</th><th>المدة</th><th>عدد المواقع</th></tr>' +
-  '<tr><td><b>تجربة مجانية</b></td><td>مجانًا</td><td>3 أيام</td><td>3 مواقع</td></tr>' + planRows + '</table></div><p><a class="btn" href="' + (me ? '#/dashboard' : '#/signup') + '">اختار باقتك</a></p></section></div>';
+  '<tr><td><b>تجربة مجانية</b></td><td>مجانًا</td><td>' + esc(trialDays) + ' أيام</td><td>' + (trialSites === -1 ? 'غير محدود' : esc(trialSites)) + ' مواقع</td></tr>' + planRows + '</table></div><p><a class="btn" href="' + (me ? '#/subscriptions' : '#/signup') + '">اختار باقتك</a></p></section></div>';
 }
 
 function signup(m) {
@@ -145,11 +152,14 @@ async function dashboard(m) {
   const s = status(me);
   const { data } = await sb.from('sites').select('*').eq('owner_id', me.id).order('created_at', { ascending: false });
   const sites = data || [];
-  let siteLimit = 3;
+  let siteLimit = me.plan === 'trial' ? Number(me.trial_site_limit ?? 3) : 3;
   if (me.subscription_plan_id) {
     const { data: activePlan } = await sb.from('subscription_plans').select('max_sites').eq('id', me.subscription_plan_id).maybeSingle();
     if (activePlan && Number.isInteger(activePlan.max_sites)) siteLimit = activePlan.max_sites;
   }
+  const bonus = Number(me.site_limit_bonus || 0);
+  if (bonus === -1) siteLimit = -1;
+  else if (siteLimit !== -1) siteLimit += Math.max(0, bonus);
   const tp = await sb.from('site_templates').select('id,name,site_type,description,content,color,theme').eq('active', true).order('created_at');
   const tpls = tp.error ? [] : (tp.data || []);
   let pend = []; if (me.role !== 'super_admin') {
@@ -239,12 +249,16 @@ async function admin(m) {
   if (!TABS.some(t => t[0] === curTab)) curTab = 'users';
   const tabsNav = '<nav class="atabs" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 20px">' +
     TABS.map(t => '<button type="button" class="btn sm' + (t[0] === curTab ? '' : ' ghost') + '" data-tab="' + t[0] + '">' + t[1] + '</button>').join('') + '</nav>';
+  let homeCardsCfg = []; try { homeCardsCfg = JSON.parse(cfg.home_cards || '[]'); } catch {} if (!Array.isArray(homeCardsCfg)) homeCardsCfg = [];
   const setHtml = '<h2>الإعدادات</h2>' + (ss && ss.error ? '<p class="msg">تأكد إنك شغّلت SQL الإعدادات.</p>' : '') +
     '<form class="card" id="setf"><label>رقم فودافون كاش (اللي العميل بيحوّل عليه)<input name="cash" type="tel" required maxlength="20" value="' + esc(cfg.vodafone_cash || C.VODAFONE_CASH || '') + '"></label>' +
     '<label>رقم واتساب (بالشكل 01xxxxxxxxx)<input name="wa" type="tel" required maxlength="20" value="' + esc(cfg.whatsapp || C.WHATSAPP || '') + '"></label>' +
     '<label>تاريخ بداية تشغيل الموقع<input name="launch" type="date" required value="' + launch.toISOString().slice(0, 10) + '"></label>' +
+    '<h3>التجربة المجانية الافتراضية للحسابات الجديدة</h3><div class="thg"><label>مدتها بالأيام<input name="trial_days" type="number" min="1" max="365" value="' + esc(cfg.trial_days || '3') + '" required></label><label>عدد المواقع (-1 = غير محدود)<input name="trial_sites" type="number" min="-1" value="' + esc(cfg.trial_sites || '3') + '" required></label></div>' +
     '<label>عنوان الصفحة الرئيسية<input class="rtl" name="ht" maxlength="120" value="' + esc(cfg.hero_title || '') + '" placeholder="موقعك على الإنترنت في دقائق"></label>' +
     '<label>وصف الصفحة الرئيسية<textarea class="rtl" name="hx" rows="2" maxlength="300" placeholder="اتركه فاضي لاستخدام النص الافتراضي">' + esc(cfg.hero_text || '') + '</textarea></label>' +
+    '<div class="thg"><label>شكل مقدمة الصفحة<select name="home_layout"><option value="split"' + (cfg.home_layout === 'center' ? '' : ' selected') + '>نص وصورة</option><option value="center"' + (cfg.home_layout === 'center' ? ' selected' : '') + '>نص بالمنتصف</option></select></label><label>نص زر المقدمة<input name="home_cta_text" value="' + esc(cfg.home_cta_text || 'إنشاء موقع') + '" maxlength="50"></label><label>رابط زر المقدمة<input dir="ltr" name="home_cta_url" value="' + esc(cfg.home_cta_url || '#/signup') + '" maxlength="300"></label><label>الصورة الرئيسية<input name="home_img" type="file" accept="image/jpeg,image/png,image/webp">' + (cfg.hero_image ? '<small>فيه صورة محفوظة حاليًا.</small>' : '') + '</label></div>' +
+    '<h3>بطاقات الصفحة الرئيسية (صور وروابط)</h3>' + [1,2,3].map(i => { const c = homeCardsCfg[i-1] || {}; return '<fieldset class="home-card-fields"><legend>بطاقة ' + i + '</legend><label>العنوان<input name="hc_title' + i + '" value="' + esc(c.title || '') + '" maxlength="80"></label><label>الوصف<input name="hc_text' + i + '" value="' + esc(c.text || '') + '" maxlength="180"></label><label>رابط الصورة (اختياري)<input dir="ltr" name="hc_image' + i + '" value="' + esc(c.image || '') + '"></label><label>أو ارفع صورة<input name="hc_file' + i + '" type="file" accept="image/jpeg,image/png,image/webp"></label><div class="thg"><label>نص الزر<input name="hc_button' + i + '" value="' + esc(c.button || '') + '" maxlength="50"></label><label>رابط الزر<input dir="ltr" name="hc_url' + i + '" value="' + esc(c.url || '') + '" maxlength="300"></label></div></fieldset>'; }).join('') +
     '<label>نص الإعلان على المواقع المجانية<input class="rtl" name="ad" maxlength="200" value="' + esc(cfg.ad_text || C.AD_TEXT || '') + '"></label>' +
     '<button class="btn">حفظ الإعدادات</button></form>';
   users.forEach(x => byId[x.id] = x);
@@ -262,7 +276,7 @@ async function admin(m) {
     '<div class="tab" id="t-users" hidden><h2>المستخدمين</h2><div class="tbl"><table><tr><th>الاسم</th><th>البريد</th><th>الهاتف</th><th>الباقة</th><th>الحالة</th><th>تاريخ التسجيل</th><th>إجراءات</th></tr>' +
     users.map(x => '<tr><td>' + esc(x.full_name) + '</td><td dir="ltr">' + esc(x.email) + '</td><td dir="ltr">' + esc(x.phone) + '</td><td>' + esc((plans.find(p => p.id === x.subscription_plan_id) || {}).name || planName(x.plan)) + (x.role === 'super_admin' ? ' (أدمن)' : '') + '</td><td>' + esc(status(x).text) + (x.is_disabled ? ' - معطّل' : '') + '</td><td>' + new Date(x.created_at).toLocaleDateString('ar-EG') + '</td><td class="act">' +
     (x.id === me.id ? '' : '<button class="btn sm ' + (x.is_disabled ? '' : 'warn') + '" data-a="dis" data-id="' + x.id + '" data-v="' + !x.is_disabled + '">' + (x.is_disabled ? 'تفعيل الحساب' : 'تعطيل') + '</button><button class="btn sm warn" data-a="udel" data-id="' + x.id + '" data-email="' + esc(x.email) + '">حذف الحساب</button>') +
-    '<button class="btn sm" data-a="assign" data-id="' + x.id + '">إسناد باقة</button><button class="btn sm ghost" data-a="plan" data-id="' + x.id + '" data-p="trial" data-d="3">تجربة +3 أيام</button></td></tr>').join('') + '</table></div>' +
+    '<button class="btn sm" data-a="assign" data-id="' + x.id + '">إسناد باقة</button><button class="btn sm ghost" data-a="bonus" data-id="' + x.id + '" data-bonus="' + Number(x.site_limit_bonus || 0) + '">زيادة حد المواقع (' + Number(x.site_limit_bonus || 0) + ')</button>' + (x.plan !== 'trial' && x.plan_ends_at && daysLeft(x.plan_ends_at) > 0 ? '<button class="btn sm warn" data-a="cancel" data-id="' + x.id + '">إلغاء الاشتراك</button>' : '') + '<button class="btn sm ghost" data-a="plan" data-id="' + x.id + '" data-p="trial" data-d="' + esc(cfg.trial_days || '3') + '">تجربة +' + esc(cfg.trial_days || '3') + ' أيام</button></td></tr>').join('') + '</table></div>' +
     '</div><div class="tab" id="t-sites" hidden><h2>المواقع</h2><div class="tbl"><table><tr><th>الموقع</th><th>الرابط</th><th>النوع</th><th>صاحب الموقع</th><th>الحالة</th><th>إجراءات</th></tr>' +
     (sites.length ? sites.map(x => '<tr><td>' + esc(x.name) + '</td><td><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(x.slug) + '</a></td><td>' + TYPE_NAMES[x.site_type] + '</td><td dir="ltr">' + esc(email[x.owner_id] || '') + '</td><td>' + (x.status === 'active' ? 'شغال' : 'موقوف') + '</td><td class="act"><a class="btn sm" href="#/builder/' + esc(x.id) + '">تعديل بالماوس</a><button class="btn sm ' + (x.status === 'active' ? 'warn' : '') + '" data-a="site" data-id="' + x.id + '" data-s="' + (x.status === 'active' ? 'suspended' : 'active') + '">' + (x.status === 'active' ? 'إيقاف' : 'تشغيل') + '</button><button class="btn sm ghost" data-a="move" data-id="' + esc(x.id) + '">نقل الملكية</button><button class="btn sm ghost" data-a="tpl" data-id="' + x.id + '">حفظ كقالب</button><button class="btn sm warn" data-a="sdel" data-id="' + x.id + '">حذف الموقع</button></td></tr>').join('') : '<tr><td colspan="6">مفيش مواقع لسه.</td></tr>') + '</table></div></div></section>';
   const showTab = t => {
@@ -279,10 +293,29 @@ async function admin(m) {
     let wa = String(f.get('wa')).replace(/[^0-9]/g, '');
     if (wa.startsWith('0') && wa.length === 11) wa = '20' + wa.slice(1);
     if (cash.length < 8 || cash.length > 15 || wa.length < 10 || wa.length > 15) { msg.textContent = 'راجع الأرقام اللي كتبتها.'; return; }
+    const trialDays = +f.get('trial_days'), trialSites = +f.get('trial_sites');
+    if (!Number.isInteger(trialDays) || trialDays < 1 || trialDays > 365 || !Number.isInteger(trialSites) || trialSites < -1) { msg.textContent = 'راجع مدة التجربة وحد المواقع.'; return; }
+    let heroImage = cfg.hero_image || '';
+    const heroFile = f.get('home_img');
+    if (heroFile && heroFile.size) { try { heroImage = await uploadFile(heroFile, ['image']); } catch (er) { msg.textContent = er.message; return; } }
+    const homeCards = [];
+    for (const i of [1,2,3]) {
+      const c = { title: String(f.get('hc_title' + i) || '').trim(), text: String(f.get('hc_text' + i) || '').trim(), image: String(f.get('hc_image' + i) || '').trim(), button: String(f.get('hc_button' + i) || '').trim(), url: String(f.get('hc_url' + i) || '').trim() };
+      const file = f.get('hc_file' + i);
+      if (file && file.size) { try { c.image = await uploadFile(file, ['image']); } catch (er) { msg.textContent = er.message; return; } }
+      if (c.title || c.image || c.text) homeCards.push(c);
+    }
     const now = new Date().toISOString();
     const r = await sb.from('app_settings').upsert([
+      { key: 'trial_days', value: String(trialDays), updated_at: now },
+      { key: 'trial_sites', value: String(trialSites), updated_at: now },
       { key: 'hero_title', value: String(f.get('ht')).trim(), updated_at: now },
       { key: 'hero_text', value: String(f.get('hx')).trim(), updated_at: now },
+      { key: 'hero_image', value: heroImage, updated_at: now },
+      { key: 'home_layout', value: String(f.get('home_layout')), updated_at: now },
+      { key: 'home_cta_text', value: String(f.get('home_cta_text')).trim(), updated_at: now },
+      { key: 'home_cta_url', value: String(f.get('home_cta_url')).trim(), updated_at: now },
+      { key: 'home_cards', value: JSON.stringify(homeCards), updated_at: now },
       { key: 'ad_text', value: String(f.get('ad')).trim(), updated_at: now },
       { key: 'vodafone_cash', value: cash, updated_at: now },
       { key: 'whatsapp', value: wa, updated_at: now },
@@ -319,6 +352,12 @@ async function admin(m) {
     const msg = document.getElementById('amsg'); msg.textContent = '';
     const a = b.dataset.a; let r;
     if (a === 'dis') r = await sb.rpc('admin_set_disabled', { target: b.dataset.id, disabled: b.dataset.v === 'true' });
+    else if (a === 'bonus') {
+      const raw = prompt('عدد المواقع الإضافية لهذا الحساب. اكتب -1 لجعله غير محدود:', b.dataset.bonus || '0'); if (raw === null) return;
+      const n = Number(raw); if (!Number.isInteger(n) || n < -1) { msg.textContent = 'اكتب صفرًا أو رقمًا موجبًا، أو -1 لغير محدود.'; return; }
+      r = await sb.rpc('admin_set_site_limit_bonus', { p_target: b.dataset.id, p_bonus: n });
+    }
+    else if (a === 'cancel') { if (!confirm('إلغاء اشتراك هذا العميل الآن؟ سيظل حسابه ومواقعه موجودة، لكن لن يستطيع إنشاء مواقع جديدة.')) return; r = await sb.rpc('admin_cancel_subscription', { p_target: b.dataset.id }); }
     else if (a === 'pedit') {
       const p = plans.find(x => x.id === b.dataset.id); if (!p) return;
       const name = prompt('اسم الباقة:', p.name); if (name === null) return;
@@ -556,8 +595,17 @@ function subscriptionsPage(m) {
   if (!me) { location.hash = '#/login'; return; }
   const current = (window.APP_PLANS || []).find(p => p.id === me.subscription_plan_id);
   const st = status(me), end = me.plan === 'trial' ? me.trial_ends_at : me.plan_ends_at;
-  m.innerHTML = '<section class="wrap"><h1>الاشتراك</h1><article class="current-plan"><div><small>باقتك الحالية</small><h2>' + esc(current ? current.name : (me.plan === 'trial' ? 'التجربة المجانية' : planName(me.plan))) + '</h2><p class="status ' + (st.ok ? 'on' : 'off') + '">' + esc(st.text) + '</p>' + (end ? '<small>تاريخ الانتهاء: ' + new Date(end).toLocaleDateString('ar-EG') + '</small>' : '') + '</div><a class="btn" href="#/dashboard">لوحة مواقعي</a></article>' + payHtml() + '<p class="hint">اختار الباقة المناسبة، حوّل المبلغ، ثم أرسل طلبك. الاشتراك يتفعّل بعد مراجعة الأدمن.</p></section>';
-  m.onclick = e => { const b = e.target.closest('[data-pay]'); if (b) startPay(b.dataset.pay, b); };
+  const cancellable = me.plan !== 'trial' && me.plan !== 'cancelled' && me.plan_ends_at && daysLeft(me.plan_ends_at) > 0;
+  m.innerHTML = '<section class="wrap"><h1>الاشتراك</h1><article class="current-plan"><div><small>باقتك الحالية</small><h2>' + esc(current ? current.name : (me.plan === 'trial' ? 'التجربة المجانية' : planName(me.plan))) + '</h2><p class="status ' + (st.ok ? 'on' : 'off') + '">' + esc(st.text) + '</p>' + (end ? '<small>تاريخ الانتهاء: ' + new Date(end).toLocaleDateString('ar-EG') + '</small>' : '') + '</div><div><a class="btn" href="#/dashboard">لوحة مواقعي</a> ' + (cancellable ? '<button type="button" id="cancel-mine" class="btn warn">إلغاء اشتراكي</button>' : '') + '</div></article>' + payHtml() + '<p class="hint">اختار الباقة المناسبة، حوّل المبلغ، ثم أرسل طلبك. الاشتراك يتفعّل بعد مراجعة الأدمن.</p></section>';
+  m.onclick = async e => {
+    const b = e.target.closest('[data-pay]'); if (b) { startPay(b.dataset.pay, b); return; }
+    if (e.target.closest('#cancel-mine')) {
+      if (!confirm('إلغاء اشتراكك الآن؟ سيظل حسابك ومواقعك موجودة، لكن لن تستطيع إنشاء مواقع جديدة.')) return;
+      const { error } = await sb.rpc('cancel_my_subscription');
+      if (error) { alert('تعذر إلغاء الاشتراك: ' + error.message); return; }
+      route();
+    }
+  };
 }
 
 const routes = { '/': home, '/login': login, '/signup': signup, '/dashboard': dashboard, '/subscriptions': subscriptionsPage, '/admin': admin, '/terms': terms, '/theme': themePage };
