@@ -5,43 +5,33 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <script>
 (function(l){if(l.search[1]==='/'){var d=l.search.slice(1).split('&').map(function(x){return x.replace(/~and~/g,'&')}).join('?');window.history.replaceState(null,null,l.pathname.slice(0,-1)+d+l.hash)}}(window.location));
-(function(){var p=window.location.pathname,i=p.indexOf('/s/'),b=i>=0?p.slice(0,i+1):p.replace(/[^/]*$/,'');if(!b)b='/';document.write('<base href="'+b.replace(/"/g,'')+'">')})();
 </script>
 <title>منصة المواقع</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=sitefix-20261121-6">
-<link rel="stylesheet" href="shop.css?v=sitefix-20261121-6">
-<link rel="stylesheet" href="theme.css?v=sitefix-20261121-6">
+<link rel="stylesheet" href="style.css?v=sitefix-20261121-2">
+<link rel="stylesheet" href="shop.css?v=sitefix-20261121-2">
+<link rel="stylesheet" href="theme.css?v=sitefix-20261121-2">
 </head>
 <body>
 <div id="app"><main id="app-loading" style="max-width:800px;margin:12vh auto;padding:24px;text-align:center;font-family:Tahoma,sans-serif">جاري تحميل الموقع…</main></div>
 <script>
-window.__siteLoadFailure = function(text) {
-  var app = document.getElementById('app');
-  if (!app || !app.querySelector('#app-loading')) return;
-  var main = document.createElement('main');
-  main.style.cssText = 'max-width:800px;margin:12vh auto;padding:24px;text-align:center;font-family:Tahoma,sans-serif';
-  var title = document.createElement('h1'); title.textContent = 'تعذر تحميل الموقع';
-  var help = document.createElement('p'); help.textContent = 'حدّث الصفحة. لو استمرت المشكلة، أرسل نص الخطأ للدعم.';
-  var detail = document.createElement('pre'); detail.dir = 'ltr'; detail.style.whiteSpace = 'pre-wrap'; detail.textContent = String(text || 'خطأ غير معروف');
-  main.append(title, help, detail); app.replaceChildren(main);
-};
 window.addEventListener('error', function(e) {
-  window.__siteLoadFailure(e.message || 'تعذر تحميل أحد ملفات الموقع');
+  var app = document.getElementById('app');
+  if (app && app.querySelector('#app-loading')) app.innerHTML = '<main style="max-width:800px;margin:12vh auto;padding:24px;text-align:center;font-family:Tahoma,sans-serif"><h1>تعذر تحميل الموقع</h1><p>حدّث الصفحة. لو استمرت المشكلة، أرسل للدعم نص الخطأ التالي:</p><pre dir="ltr" style="white-space:pre-wrap">' + String(e.message || 'تعذر تحميل أحد ملفات الموقع') + '</pre></main>';
 });
 window.addEventListener('unhandledrejection', function(e) {
-  window.__siteLoadFailure(e.reason && (e.reason.message || e.reason) || 'خطأ في تحميل البيانات');
+  var app = document.getElementById('app');
+  if (app && app.querySelector('#app-loading')) app.innerHTML = '<main style="max-width:800px;margin:12vh auto;padding:24px;text-align:center;font-family:Tahoma,sans-serif"><h1>تعذر تحميل الموقع</h1><p>حدّث الصفحة. لو استمرت المشكلة، أرسل للدعم نص الخطأ التالي:</p><pre dir="ltr" style="white-space:pre-wrap">' + String(e.reason && (e.reason.message || e.reason) || 'خطأ في تحميل البيانات') + '</pre></main>';
 });
-setTimeout(function() { window.__siteLoadFailure('تحميل الموقع استغرق وقتًا أطول من اللازم. تحقق من اتصال Supabase ثم حدّث الصفحة.'); }, 15000);
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=sitefix-20261121-6" onerror="window.__siteLoadFailure('تعذر تحميل config.js')"></script>
-<script src="shop.js?v=sitefix-20261121-6" onerror="window.__siteLoadFailure('تعذر تحميل shop.js')"></script>
-<script src="theme.js?v=sitefix-20261121-6" onerror="window.__siteLoadFailure('تعذر تحميل theme.js')"></script>
-<script src="store.js?v=sitefix-20261121-6" onerror="window.__siteLoadFailure('تعذر تحميل store.js')"></script>
-<script src="extras.js?v=sitefix-20261121-6" onerror="window.__siteLoadFailure('تعذر تحميل extras.js')"></script>
-<script src="app.js?v=sitefix-20261121-6" onerror="window.__siteLoadFailure('تعذر تحميل app.js')"></script>
+<script src="config.js?v=sitefix-20261121-2"></script>
+<script src="shop.js?v=sitefix-20261121-2"></script>
+<script src="theme.js?v=sitefix-20261121-2"></script>
+<script src="store.js?v=sitefix-20261121-2"></script>
+<script src="extras.js?v=sitefix-20261121-2"></script>
+<script src="app.js?v=sitefix-20261121-2"></script>
 </body>
 </html>
