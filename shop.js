@@ -105,7 +105,7 @@ async function manage(m, id) {
   const vis = (vs.data && vs.data[0]) || { today: 0, week: 0, total: 0 };
   const revenue = orders.filter(x => x.status !== 'cancelled').reduce((s, x) => s + Number(x.total), 0);
 
-  m.innerHTML = '<section class="wrap" style="max-width:1100px"><h1>إدارة: ' + esc(site.name) + '</h1><p><a href="#/dashboard">الرجوع لمواقعي</a> | <a href="#/s/' + esc(site.slug) + '" target="_blank">فتح الموقع</a></p>' +
+  m.innerHTML = '<section class="wrap" style="max-width:1100px"><h1>إدارة: ' + esc(site.name) + '</h1><p><a href="#/dashboard">الرجوع لمواقعي</a> | <a href="' + esc(siteUrl(site.slug)) + '" target="_blank">فتح الموقع</a></p>' +
     '<div class="stats"><div>الطلبات: <b>' + orders.length + '</b></div><div>طلبات جديدة: <b>' + orders.filter(x => x.status === 'new').length + '</b></div><div>الإيرادات: <b>' + money(revenue) + '</b></div><div>الحجوزات: <b>' + books.length + '</b></div><div>زيارات اليوم: <b>' + vis.today + '</b></div><div>آخر 7 أيام: <b>' + vis.week + '</b></div><div>كل الزيارات: <b>' + vis.total + '</b></div></div>' +
     '<div class="msg" id="mmsg" role="alert"></div>' +
     '<h2>الحجوزات</h2><label class="chk"><input type="checkbox" id="bken"' + (site.booking_enabled ? ' checked' : '') + '> تفعيل نموذج الحجز في موقعي</label>' +

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>surehgo</title>
+<script>
+// يحوّل أي رابط نضيف (زي /s/اسم-الموقع) لصفحة التطبيق الرئيسية، وهي بترجّع الرابط النضيف تاني
+(function (l) {
+  var keep = /\.github\.io$/.test(l.hostname) ? 1 : 0;
+  var segs = l.pathname.split('/');
+  l.replace(
+    l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+    segs.slice(0, 1 + keep).join('/') + '/?/' +
+    segs.slice(1 + keep).join('/').replace(/&/g, '~and~') +
+    (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') + l.hash
+  );
+})(window.location);
+</script>
+</head>
+<body></body>
+</html>

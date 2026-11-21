@@ -38,18 +38,37 @@ async function siteExtras(site) {
     if (data === true && el.isConnected) {
       const bar = document.createElement('div');
       bar.className = 'ad-bar'; bar.setAttribute('role', 'complementary'); bar.setAttribute('aria-label', 'إعلان');
-      bar.innerHTML = '<span>إعلان: </span><a href="' + esc(location.origin + location.pathname) + '">' + esc(C.AD_TEXT || 'موقع مجاني من ' + C.PLATFORM_NAME) + '</a>';
+      bar.innerHTML = '<span>إعلان: </span><a href="' + esc(location.origin + BASE) + '">' + esc(C.AD_TEXT || 'موقع مجاني من ' + C.PLATFORM_NAME) + '</a>';
       el.insertBefore(bar, el.firstChild);
     }
   } catch {}
 }
 
 // ====== الذكاء الاصطناعي في المحرر (بيستدعي Edge Function اسمها generate-site) ======
+function aiAsk() {
+  return new Promise(res => {
+    const d = document.createElement('dialog'); d.className = 'dlg';
+    d.innerHTML = '<form method="dialog"><h3>إنشاء بالذكاء الاصطناعي</h3><label>وصف نشاطك وأهم خدماتك أو منتجاتك<textarea class="rtl" name="desc" rows="4" maxlength="800"></textarea></label>' +
+      '<label>نبرة الكتابة<select name="tone"><option>ودّية</option><option>رسمية</option><option>حماسية</option><option>فاخرة</option></select></label>' +
+      '<label>طريقة الإضافة<select name="mode"><option value="add">إضافة لآخر الصفحة</option><option value="replace">استبدال محتوى الصفحة</option></select></label>' +
+      '<div class="act"><button class="btn" value="ok">إنشاء</button><button class="btn ghost" value="no" formnovalidate>إلغاء</button></div></form>';
+    document.body.appendChild(d);
+    d.onclose = () => { const f = new FormData(d.querySelector('form')), ok = d.returnValue === 'ok'; d.remove(); res(ok ? { desc: String(f.get('desc') || '').trim(), tone: f.get('tone'), mode: f.get('mode') } : null); };
+    d.showModal();
+  });
+}
+function aiUndoBtn(prev, blocks, draw, st) {
+  let b = document.getElementById('ai-undo');
+  if (!b) { b = document.createElement('button'); b.type = 'button'; b.id = 'ai-undo'; b.className = 'btn ghost'; document.getElementById('ai').after(b); }
+  b.textContent = 'تراجع عن الذكاء الاصطناعي';
+  b.onclick = () => { blocks.length = 0; blocks.push(...prev); draw(); st('تم التراجع. اضغط حفظ.'); b.remove(); };
+}
 async function aiGenerate(siteId, blocks, st, draw) {
-  const prompt = window.prompt('اكتب وصف نشاطك وأهم خدماتك أو منتجاتك (اختياري)، وهنجهّز لك أقسام الموقع. المحتوى بيتضاف لآخر الصفحة وتقدر تعدّله قبل الحفظ:', '');
-  if (prompt === null) return;
+  const ask = await aiAsk(); if (!ask) return;
+  if (ask.mode === 'replace' && blocks.length && !confirm('هيتم استبدال محتوى الصفحة الحالي. تقدر تتراجع بعدها. تكمل؟')) return;
+  const prompt = (ask.desc + '\nالنبرة المطلوبة: ' + ask.tone + '\nاكتب بالعربية.').trim();
   st('جاري إنشاء المحتوى بالذكاء الاصطناعي...');
-  const { data, error } = await sb.functions.invoke('generate-site', { body: { site_id: siteId, prompt: prompt.slice(0, 1000) } });
+  const { data, error } = await sb.functions.invoke('generate-site', { body: { site_id: siteId, prompt: prompt.slice(0, 1000), tone: ask.tone, mode: ask.mode } });
   if (error) {
     let code = '';
     try { code = (await error.context.json()).error; } catch {}
@@ -62,9 +81,10 @@ async function aiGenerate(siteId, blocks, st, draw) {
     })[code] || 'تعذر إنشاء المحتوى. جرّب تاني.');
     return;
   }
-  const room = 40 - blocks.length, add = arr(data && data.blocks).filter(b => b && BLOCKS[b.type]).slice(0, Math.max(room, 0));
+  const room = 40 - (ask.mode === 'replace' ? 0 : blocks.length), add = arr(data && data.blocks).filter(b => b && BLOCKS[b.type]).slice(0, Math.max(room, 0));
   if (!add.length) { st(room <= 0 ? 'وصلت للحد الأقصى (40 عنصر).' : 'مفيش محتوى جديد. جرّب تاني.'); return; }
-  blocks.push(...add); draw();
+  const prev = blocks.slice(); if (ask.mode === 'replace') blocks.length = 0;
+  blocks.push(...add); draw(); aiUndoBtn(prev, blocks, draw, st);
   st('تمت إضافة ' + add.length + ' عنصر. راجعهم واضغط حفظ.');
 }
 
@@ -78,6 +98,7 @@ const payHtml = () =>
   '</button></div><div id="pay-info"></div>';
 
 async function startPay(plan, btn) {
+  if (!confirm('هتبعت طلب اشتراك ' + planLabel(plan) + ' (' + planPrice(plan) + '). الاشتراك مش بيتفعّل غير بعد ما الأدمن يراجع التحويل ويوافق. تكمل؟')) return;
   const box = document.getElementById('pay-info'); if (!box) return;
   const cfg = {};
   try { const { data } = await sb.from('app_settings').select('key,value').in('key', ['vodafone_cash', 'whatsapp']); (data || []).forEach(x => cfg[x.key] = x.value); } catch {}
@@ -106,7 +127,7 @@ async function startPay(plan, btn) {
     const { error } = await sb.rpc('request_subscription', { p_plan: plan, p_sender: fd.get('sender').trim(), p_note: fd.get('note').trim() });
     go.disabled = false;
     if (error) { msg.textContent = /too_many_pending/.test(error.message || '') ? 'عندك طلبات لسه تحت المراجعة. استنى الرد عليها.' : 'تعذر إرسال الطلب. جرّب تاني.'; return; }
-    f.reset(); msg.className = 'msg ok'; msg.textContent = 'تم استلام طلبك. هنراجع التحويل ونفعّل اشتراكك خلال 24 ساعة.';
+    f.reset(); msg.className = 'msg ok'; msg.textContent = 'تم استلام طلبك وهو بانتظار تأكيد الأدمن. هيتفعّل اشتراكك بعد مراجعة التحويل (خلال 24 ساعة).';
   };
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
