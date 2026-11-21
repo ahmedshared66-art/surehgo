@@ -93,9 +93,10 @@ function themeFields(t) {
     '<label>الخط<select name="t_font">' + sel(t.font || '', [['', 'الافتراضي']].concat(fontList(window.APP_SETTINGS).map(x => [x, x]))) + '</select></label>' +
     '<label>استدارة الحواف<input type="range" name="t_radius" min="0" max="32" value="' + (r >= 0 ? r : 8) + '"></label>' +
     '<label>شكل الهيرو<select name="t_hero">' + sel(t.hero || 'solid', [['solid', 'لون ثابت'], ['grad', 'تدرّج'], ['glass', 'زجاجي (تمويه)']]) + '</select></label>' +
+    '<label>شكل المتجر (قالب)<select name="t_skin">' + sel(t.skin || '', [['', 'عادي'], ['clan', 'كلان (دافئ)'], ['exemore', 'إكسيمور (متجر كبير)'], ['defacto', 'ديفاكتو (أزياء بسيط)']]) + '</select></label><label>لوجو الموقع<input type="file" name="t_logofile" accept="image/jpeg,image/png,image/webp"></label><label>صورة البانر (الخلفية)<input type="file" name="t_bannerfile" accept="image/jpeg,image/png,image/webp"></label>' +
     '<label class="chk"><input type="checkbox" name="t_anim"' + (t.anim ? ' checked' : '') + '> حركة ظهور ناعمة</label></div>';
 }
-const readSiteTheme = f => ({ bg: f.get('t_bg'), ink: f.get('t_ink'), font: f.get('t_font') || '', radius: +f.get('t_radius'), hero: f.get('t_hero'), anim: f.get('t_anim') === 'on' });
+const readSiteTheme = f => ({ bg: f.get('t_bg'), ink: f.get('t_ink'), font: f.get('t_font') || '', radius: +f.get('t_radius'), hero: f.get('t_hero'), skin: f.get('t_skin') || '', anim: f.get('t_anim') === 'on' });
 function siteTheme(t) {
   t = t && typeof t === 'object' ? t : {};
   const ok = c => /^#[0-9a-f]{6}$/i.test(c || ''), r = parseInt(t.radius, 10);
@@ -104,5 +105,19 @@ function siteTheme(t) {
   if (ok(t.ink)) s += ';--tx:' + t.ink;
   if (r >= 0 && r <= 32) s += ';--rs:' + r + 'px';
   if (fontList(window.APP_SETTINGS).includes(t.font)) { s += ";--sf:'" + t.font + "'"; loadFont(t.font); }
-  return { style: s, cls: (t.hero === 'grad' || t.hero === 'glass' ? ' h-' + t.hero : '') + (t.anim === true ? ' anim' : '') };
+  const su = u => /^https:\/\/[^\s"'()<>\\]+$/i.test(u || '') ? u : '';
+  const bn = su(t.banner), lg = su(t.logo);
+  if (bn) s += ';--bn:url("' + bn + '")';
+  return { style: s, logo: lg ? '<img class="s-logo" src="' + lg + '" alt="">' : '', cls: (t.hero === 'grad' || t.hero === 'glass' ? ' h-' + t.hero : '') + (t.anim === true ? ' anim' : '') + (['clan', 'exemore', 'defacto'].includes(t.skin) ? ' sk-' + t.skin : '') + (bn ? ' has-bn' : '') };
+}
+
+// قراءة مظهر الموقع مع رفع اللوجو والبانر لو العميل اختار صور جديدة
+async function siteThemeFrom(f, old) {
+  const th = readSiteTheme(f); old = old && typeof old === 'object' ? old : {};
+  for (const [k, field] of [['logo', 't_logofile'], ['banner', 't_bannerfile']]) {
+    th[k] = old[k] || '';
+    const file = f.get(field);
+    if (file && file.size) { try { th[k] = await uploadFile(file, ['image']); } catch (er) { alert(er.message); } }
+  }
+  return th;
 }

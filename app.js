@@ -126,7 +126,7 @@ async function siteView(slug) {
   document.title = data.name;
   const ph = (data.phone || '').replace(/[^0-9+]/g, '');
   const ST = siteTheme(data.theme);
-  root.innerHTML = '<div class="site' + ST.cls + '" style="--c:' + esc(safeCol(data.color)) + ';--t:' + (lum(safeCol(data.color)) > 150 ? '#10202B' : '#fff') + esc(ST.style) + '"><header class="s-hero"><div class="s-in"><h1>' + esc(data.name) + '</h1><p>' + esc(data.description) + '</p>' + (ph ? '<a class="s-btn" href="tel:' + ph + '">اتصل بنا</a>' : '') + '</div></header><main class="s-body">' +
+  root.innerHTML = '<div class="site' + ST.cls + '" style="--c:' + esc(safeCol(data.color)) + ';--t:' + (lum(safeCol(data.color)) > 150 ? '#10202B' : '#fff') + esc(ST.style) + '"><header class="s-hero"><div class="s-in">' + ST.logo + '<h1>' + esc(data.name) + '</h1><p>' + esc(data.description) + '</p>' + (ph ? '<a class="s-btn" href="tel:' + ph + '">اتصل بنا</a>' : '') + '</div></header><main class="s-body">' +
     (arr(data.content).length ? arr(data.content).map(renderBlock).join('') : (TEMPLATES[data.site_type] || []).map(x => '<section><h2>' + x[0] + '</h2><p>' + x[1] + '</p></section>').join('')) +
     '<div id="shop-box"></div></main><footer class="s-foot">' + (ph ? '<div dir="ltr">' + esc(ph) + '</div>' : '') + '<a href="' + esc(BASE) + '">Powered by ' + esc(C.PLATFORM_NAME) + '</a></footer></div>';
   shopSection(data);
@@ -138,7 +138,7 @@ async function dashboard(m) {
   const s = status(me);
   const { data } = await sb.from('sites').select('*').eq('owner_id', me.id).order('created_at', { ascending: false });
   const sites = data || [];
-  const tp = await sb.from('site_templates').select('id,name,site_type,description,content').eq('active', true).order('created_at');
+  const tp = await sb.from('site_templates').select('id,name,site_type,description,content,color,theme').eq('active', true).order('created_at');
   const tpls = tp.error ? [] : (tp.data || []);
   let pend = []; if (me.role !== 'super_admin') { try { pend = (await sb.from('payment_requests').select('*').eq('status', 'pending')).data || []; } catch {} }
   const canCreate = s.ok && sites.length < 3;
@@ -152,7 +152,7 @@ async function dashboard(m) {
     const f = new FormData(nf), msg = nf.querySelector('.msg'); msg.textContent = '';
     const tpl = tpls.find(t => t.id === f.get('tpl'));
     const row = { slug: f.get('slug').trim().toLowerCase(), name: f.get('name').trim(), site_type: (tpl && tpl.site_type) || f.get('type'), description: f.get('description').trim() || (tpl && tpl.description) || '', color: f.get('color'), phone: f.get('phone').trim() };
-    if (tpl) row.content = arr(tpl.content).slice(0, 40);
+    if (tpl) { row.content = arr(tpl.content).slice(0, 40); row.theme = tpl.theme && typeof tpl.theme === 'object' ? tpl.theme : {}; if (/^#[0-9a-f]{6}$/i.test(tpl.color || '')) row.color = tpl.color; }
     const { error } = await sb.from('sites').insert(row);
     if (error) { msg.textContent = siteErr(error); return; }
     route();
@@ -173,7 +173,7 @@ async function editSite(m, id) {
   m.querySelector('form').onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(e.target), msg = m.querySelector('.msg');
-    const { error } = await sb.from('sites').update({ name: f.get('name').trim(), description: f.get('description').trim(), color: f.get('color'), phone: f.get('phone').trim(), whatsapp: f.get('whatsapp').trim(), facebook: f.get('facebook').trim(), instagram: f.get('instagram').trim(), theme: readSiteTheme(f) }).eq('id', id);
+    const { error } = await sb.from('sites').update({ name: f.get('name').trim(), description: f.get('description').trim(), color: f.get('color'), phone: f.get('phone').trim(), whatsapp: f.get('whatsapp').trim(), facebook: f.get('facebook').trim(), instagram: f.get('instagram').trim(), theme: await siteThemeFrom(f, data.theme) }).eq('id', id);
     if (error) { msg.textContent = error.code === '23514' ? 'تأكد: واتساب أرقام فقط بالكود الدولي، وروابط فيسبوك وإنستجرام تبدأ بـ https://' : siteErr(error); return; }
     location.hash = '#/dashboard';
   };
@@ -303,7 +303,8 @@ const BLOCKS = {
   map:{n:'خريطة', d:() => ({type:'map', url:''})},
   announce:{n:'شريط إعلان', d:() => ({type:'announce', text:'عروض مبتنتهيش!', url:''})},
   trust:{n:'مميزات (ثقة)', d:() => ({type:'trust', items:[{name:'دفع عند الاستلام', text:'نقدي عند وصول الأوردر'}]})},
-  cats:{n:'أقسام المتجر', d:() => ({type:'cats'})}
+  cats:{n:'أقسام المتجر', d:() => ({type:'cats'})},
+  slider:{n:'بانر صور متحرك', d:() => ({type:'slider', urls:[]})}
 };
 const U_HTTPS = /^https:\/\//i, U_LINK = /^(https:\/\/|tel:|mailto:)/i, U_MAP = /^https:\/\/(www\.google\.com|maps\.google\.com)\/maps\/embed/i;
 const okUrl = (u, re) => typeof u === 'string' && re.test(u) ? u : '';
@@ -325,6 +326,7 @@ function renderBlock(b) {
     case 'announce': u = okUrl(b.url, U_LINK); return b.text ? '<div class="ann">' + (u ? '<a href="' + esc(u) + '" rel="noopener">' + esc(b.text) + '</a>' : esc(b.text)) + '</div>' : '';
     case 'trust': return '<div class="b-trust">' + arr(b.items).filter(x => x && x.name).map(x => '<div class="tr-c"><b>' + esc(x.name) + '</b><span>' + esc(x.text) + '</span></div>').join('') + '</div>';
     case 'cats': return '<div class="b-cats"></div>';
+    case 'slider': return arr(b.urls).some(x => okUrl(x, U_HTTPS)) ? '<div class="b-sld">' + arr(b.urls).map(x => okUrl(x, U_HTTPS) ? '<img src="' + esc(x) + '" alt="" loading="lazy">' : '').join('') + '</div>' : '';
     case 'map': u = okUrl(b.url, U_MAP); return u ? '<iframe class="b-map" src="' + esc(u) + '" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>' : '';
   }
   return '';
@@ -365,6 +367,7 @@ async function builder(m, id) {
       case 'reviews': return items(b, i, 'name', 'text', 'اسم العميل', 'نص التقييم');
       case 'announce': return inp(i, 'text', 'نص الشريط', b.text, false, 'maxlength="120"') + inp(i, 'url', 'رابط (اختياري)', b.url, true);
       case 'trust': return items(b, i, 'name', 'text', 'العنوان', 'الوصف');
+      case 'slider': return '<div class="ths">' + arr(b.urls).map((x, j) => '<span><img class="th" src="' + esc(x) + '" alt=""><button type="button" class="btn sm warn" data-gdel="' + j + '" data-i="' + i + '">x</button></span>').join('') + '</div>' + up(i, 'urls', 'image/jpeg,image/png,image/webp', 'image', 'أضف صور البانر (حتى 6)', true);
       case 'cats': return '<p class="hint">بتظهر أقسام المتجر تلقائيًا بصور من منتجاتك.</p>';
       case 'map': return inp(i, 'url', 'رابط الخريطة (قيمة src من Embed a map في Google Maps)', b.url, true);
     }
@@ -400,9 +403,9 @@ async function builder(m, id) {
     st('جاري الرفع...');
     try {
       for (const f of files) {
-        if (b.type === 'gallery' && b.urls.length >= 12) break;
+        if ((b.type === 'gallery' || b.type === 'slider') && b.urls.length >= (b.type === 'slider' ? 6 : 12)) break;
         const u = await uploadFile(f, t.dataset.up.split(','));
-        if (b.type === 'gallery') b.urls.push(u); else b.url = u;
+        if (b.type === 'gallery' || b.type === 'slider') b.urls.push(u); else b.url = u;
       }
       st('تم الرفع. اضغط حفظ.'); draw();
     } catch (er) { st(er.message); }

@@ -50,3 +50,22 @@ form.card.wide{max-width:760px}
 .b-cats{display:flex;gap:16px;overflow-x:auto;padding:12px 0;scroll-snap-type:x mandatory}
 .cat-c{flex:0 0 130px;scroll-snap-align:start;border:0;background:none;cursor:pointer;display:grid;gap:6px;justify-items:center;font:800 1rem inherit;color:inherit}
 .cat-c img{width:110px;height:110px;object-fit:cover;border-radius:50%;border:3px solid var(--c)}
+/* قوالب المتاجر (skins) */
+.s-logo{max-height:72px;max-width:70%;margin:0 auto 8px;display:block;object-fit:contain}
+.has-bn .s-hero{background-image:linear-gradient(rgba(0,0,0,.35),rgba(0,0,0,.35)),var(--bn);background-size:cover;background-position:center}
+.b-sld{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;border-radius:var(--rs,8px);margin:12px 0}
+.b-sld img{flex:0 0 100%;scroll-snap-align:center;width:100%;max-height:420px;object-fit:cover}
+.sk-clan .s-hero{background:linear-gradient(180deg,color-mix(in srgb,var(--sun) 38%,#fff),#fff);color:var(--ink)}
+.sk-clan .s-btn,.sk-clan .chip{border-radius:999px}
+.sk-exemore .s-hero{background:var(--c);color:#fff;padding:28px 6vw}
+.sk-exemore .s-btn,.sk-exemore .prod .s-btn{background:#F39C1F;color:#fff}
+.sk-exemore .prod{border-radius:6px;transition:box-shadow .2s}.sk-exemore .prod:hover{box-shadow:0 8px 22px rgba(0,0,0,.15)}
+.sk-exemore .cat-c img{border-radius:6px;width:150px;height:110px;border:0}.sk-exemore .cat-c{flex-basis:160px}
+.sk-defacto .s-hero{background:#fff;color:#111;padding:26px 6vw;border-bottom:1px solid var(--line)}
+.sk-defacto .s-hero h1{font-weight:300;letter-spacing:.08em}.sk-defacto .s-hero .s-btn,.sk-defacto .s-hero p{display:none}
+.sk-defacto .s-body{max-width:1280px}
+.sk-defacto .prods{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:20px}
+.sk-defacto .prod{border:0;padding:0}.sk-defacto .prod img{aspect-ratio:2/3;border-radius:0}
+.sk-defacto .s-btn,.sk-defacto .chip{background:#fff;color:#111;border:1px solid #111;border-radius:0}
+.sk-defacto .price{color:#111;font-weight:600}
+.sk-defacto .cat-c img{border-radius:0;border:0;width:120px;height:160px}

@@ -99,8 +99,17 @@ async function shopSection(site) {
       if (!items.length) { msg.textContent = 'السلة فاضية.'; return; }
       const { error } = await sb.rpc('place_order_v2', { p_site: site.id, p_name: f.get('name').trim(), p_phone: f.get('phone').trim(), p_gov: f.get('gov'), p_address: addr(f), p_note: f.get('note').trim(), p_items: items });
       if (error) { msg.textContent = /out_of_stock/.test(error.message || '') ? 'الكمية المطلوبة مش متاحة لواحد من المنتجات. عدّل السلة وجرّب تاني.' : 'تعذر إرسال الطلب. راجع البيانات وجرّب تاني.'; return; }
+      const gov = f.get('gov'), sub = items.reduce((s, i) => s + byId[i.id].price * i.qty, 0);
+      const wtxt = 'طلب جديد من موقع ' + site.name + '\nالاسم: ' + f.get('name') + '\nالهاتف: ' + f.get('phone') + '\nالمحافظة: ' + gov + '\nالعنوان: ' + addr(f) +
+        '\nالأصناف:\n' + items.map(i => '- ' + byId[i.id].name + ' × ' + i.qty).join('\n') + '\nالإجمالي مع الشحن: ' + money(sub + shipFor(gov));
       setCart(site.id, {}); form.reset(); drawCart();
       msg.className = 'msg ok'; msg.textContent = 'تم استلام طلبك. هنتواصل معاك قريباً.';
+      const wn = String(site.whatsapp || '').replace(/[^0-9]/g, '');
+      if (wn.length >= 8 && wn.length <= 15) {
+        const a = document.createElement('a'); a.className = 'btn'; a.target = '_blank'; a.rel = 'noopener';
+        a.href = 'https://wa.me/' + wn + '?text=' + encodeURIComponent(wtxt); a.textContent = 'ابعت تفاصيل طلبك للتاجر على واتساب';
+        msg.appendChild(document.createElement('br')); msg.appendChild(a);
+      }
     } else if (form.id === 'bk') {
       const msg = box.querySelector('#bmsg'); msg.className = 'msg'; msg.textContent = '';
       const { error } = await sb.from('bookings').insert({ site_id: site.id, customer_name: f.get('name').trim(), customer_phone: f.get('phone').trim(), booking_date: f.get('date'), booking_time: f.get('time'), note: f.get('note').trim() });
