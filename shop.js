@@ -1,10 +1,9 @@
 // shop.js — المرحلة 4: المتجر والحجوزات ولوحة صاحب الموقع
+// بيتحمّل قبل app.js، وبيستخدم sb و esc و me و okUrl و U_HTTPS و uploadFile و arr و route من app.js وقت التشغيل.
 
 const money = n => Number(n || 0).toLocaleString('ar-EG') + ' جنيه';
 const getCart = id => { try { const c = JSON.parse(localStorage.getItem('cart:' + id) || '{}'); return c && typeof c === 'object' ? c : {}; } catch { return {}; } };
 const setCart = (id, c) => { try { localStorage.setItem('cart:' + id, JSON.stringify(c)); } catch {} };
-const getLastOrder = id => { try { const d = JSON.parse(localStorage.getItem('last_ord:' + id) || 'null'); return d && typeof d === 'object' ? d : null; } catch { return null; } };
-const setLastOrder = (id, d) => { try { localStorage.setItem('last_ord:' + id, JSON.stringify(d)); } catch {} };
 const ORD = { new: 'جديد', confirmed: 'تم التأكيد', delivered: 'تم التسليم', cancelled: 'ملغي' };
 const BK = { new: 'جديد', confirmed: 'مؤكد', done: 'تم', cancelled: 'ملغي' };
 const opts = (map, cur) => Object.keys(map).map(k => '<option value="' + k + '"' + (k === cur ? ' selected' : '') + '>' + map[k] + '</option>').join('');
@@ -14,6 +13,7 @@ const oldp = p => p.old_price > p.price ? '<s class="old">' + money(p.old_price)
 const addr = f => [f.get('city'), f.get('street'), f.get('bld') && 'عمارة ' + f.get('bld'), f.get('mark')].map(x => String(x || '').trim()).filter(Boolean).join(' - ');
 const fdate = d => new Date(d).toLocaleString('ar-EG');
 
+// ====== صفحة الموقع العامة: المنتجات والسلة والحجز ======
 async function shopSection(site) {
   const box = document.getElementById('shop-box'); if (!box) return;
   const { data } = await sb.from('products').select('*').eq('site_id', site.id).eq('active', true).order('created_at');
@@ -22,7 +22,6 @@ async function shopSection(site) {
   if (!products.length && !site.booking_enabled) { if (window.storeShell) storeShell(site, [], box); return; }
   const today = new Date().toISOString().slice(0, 10);
   const cats = [...new Set(products.map(p => p.category).filter(Boolean))];
-  const lastOrd = getLastOrder(site.id);
 
   const storeHtml = products.length
     ? '<section class="shop"><h2 class="b-h">المتجر</h2><div class="tools"><input class="rtl" type="search" id="q" placeholder="ابحث عن منتج" maxlength="60">' + (cats.length ? '<div class="chips"><button type="button" class="chip on" data-c="">الكل</button>' + cats.map(c => '<button type="button" class="chip" data-c="' + esc(c) + '">' + esc(c) + '</button>').join('') + '</div>' : '') + '</div><div class="prods">' + products.map(p => {
@@ -41,10 +40,7 @@ async function shopSection(site) {
       '<label>رقم العمارة / الدور / الشقة<input class="rtl" name="bld" maxlength="60"></label>' +
       '<label>علامة مميزة (اختياري)<input class="rtl" name="mark" maxlength="100"></label>' +
       '<label>ملاحظات<textarea class="rtl" name="note" rows="2" maxlength="300"></textarea></label>' +
-      '<button class="btn">تأكيد الطلب</button></form><div class="msg" id="omsg" role="alert"></div></div>' +
-      '<div class="track-box" style="margin-top:20px"><h3>متابعة حالة طلبك</h3>' +
-      '<form class="card" id="track-ord"><label>رقم الهاتف المستخدم في الطلب<input name="phone" type="tel" required minlength="6" maxlength="20" value="' + esc((lastOrd && lastOrd.phone) || '') + '"></label>' +
-      '<button type="submit" class="btn ghost">استعلام عن الطلب</button><div class="msg" id="tmsg" role="status"></div></form></div></section>'
+      '<button class="btn">تأكيد الطلب</button></form><div class="msg" id="omsg" role="alert"></div></div></section>'
     : '';
 
   const bookHtml = site.booking_enabled
@@ -103,30 +99,19 @@ async function shopSection(site) {
       const msg = box.querySelector('#omsg'); msg.className = 'msg'; msg.textContent = '';
       const cart = getCart(site.id), items = Object.keys(cart).filter(k => byId[k] && cart[k] > 0).map(k => ({ id: k, qty: cart[k] }));
       if (!items.length) { msg.textContent = 'السلة فاضية.'; return; }
-      const phoneVal = f.get('phone').trim();
-      const { error } = await sb.rpc('place_order_v2', { p_site: site.id, p_name: f.get('name').trim(), p_phone: phoneVal, p_gov: f.get('gov'), p_address: addr(f), p_note: f.get('note').trim(), p_items: items });
+      const { error } = await sb.rpc('place_order_v2', { p_site: site.id, p_name: f.get('name').trim(), p_phone: f.get('phone').trim(), p_gov: f.get('gov'), p_address: addr(f), p_note: f.get('note').trim(), p_items: items });
       if (error) { msg.textContent = /out_of_stock/.test(error.message || '') ? 'الكمية المطلوبة مش متاحة لواحد من المنتجات. عدّل السلة وجرّب تاني.' : 'تعذر إرسال الطلب. راجع البيانات وجرّب تاني.'; return; }
-      setLastOrder(site.id, { phone: phoneVal, at: Date.now() });
-      const tInp = box.querySelector('#track-ord [name=phone]'); if (tInp) tInp.value = phoneVal;
       const gov = f.get('gov'), sub = items.reduce((s, i) => s + byId[i.id].price * i.qty, 0);
-      const wtxt = 'طلب جديد من موقع ' + site.name + '\nالاسم: ' + f.get('name') + '\nالهاتف: ' + phoneVal + '\nالمحافظة: ' + gov + '\nالعنوان: ' + addr(f) +
+      const wtxt = 'طلب جديد من موقع ' + site.name + '\nالاسم: ' + f.get('name') + '\nالهاتف: ' + f.get('phone') + '\nالمحافظة: ' + gov + '\nالعنوان: ' + addr(f) +
         '\nالأصناف:\n' + items.map(i => '- ' + byId[i.id].name + ' × ' + i.qty).join('\n') + '\nالإجمالي مع الشحن: ' + money(sub + shipFor(gov));
       setCart(site.id, {}); form.reset(); drawCart();
-      msg.className = 'msg ok'; msg.textContent = 'تم استلام طلبك. تقدر تتابع حالته برقم هاتفك في أي وقت.';
+      msg.className = 'msg ok'; msg.textContent = 'تم استلام طلبك. هنتواصل معاك قريباً.';
       const wn = String(site.whatsapp || '').replace(/[^0-9]/g, '');
       if (wn.length >= 8 && wn.length <= 15) {
         const a = document.createElement('a'); a.className = 'btn'; a.target = '_blank'; a.rel = 'noopener';
         a.href = 'https://wa.me/' + wn + '?text=' + encodeURIComponent(wtxt); a.textContent = 'ابعت تفاصيل طلبك للتاجر على واتساب';
         msg.appendChild(document.createElement('br')); msg.appendChild(a);
       }
-    } else if (form.id === 'track-ord') {
-      const tmsg = box.querySelector('#tmsg'); tmsg.className = 'msg'; tmsg.textContent = 'جاري الاستعلام...';
-      const ph = String(f.get('phone') || '').trim();
-      const { data: rows, error } = await sb.rpc('track_order_status', { p_site: site.id, p_phone: ph });
-      if (error) { tmsg.textContent = 'تعذر الاستعلام حاليًا. جرّب بعد قليل.'; return; }
-      if (!Array.isArray(rows) || !rows.length) { tmsg.textContent = 'لا توجد طلبات مسجلة بهذا الرقم في هذا المتجر.'; return; }
-      tmsg.className = 'msg ok';
-      tmsg.innerHTML = rows.map(r => '<div>#' + esc(String(r.id || '').slice(0, 8)) + ' — <b>' + esc(ORD[r.status] || r.status) + '</b> — ' + money(r.total) + ' <small>(' + esc(fdate(r.created_at)) + ')</small></div>').join('');
     } else if (form.id === 'bk') {
       const msg = box.querySelector('#bmsg'); msg.className = 'msg'; msg.textContent = '';
       const { error } = await sb.from('bookings').insert({ site_id: site.id, customer_name: f.get('name').trim(), customer_phone: f.get('phone').trim(), booking_date: f.get('date'), booking_time: f.get('time'), note: f.get('note').trim() });
@@ -136,6 +121,7 @@ async function shopSection(site) {
   });
 }
 
+// ====== لوحة صاحب الموقع: المنتجات والطلبات والحجوزات ======
 async function manage(m, id) {
   if (!me) { location.hash = '#/login'; return; }
   const { data: site } = await sb.from('sites').select('*').eq('id', id).maybeSingle();

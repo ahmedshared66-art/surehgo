@@ -100,7 +100,8 @@ form.card.wide{max-width:760px}
 .dd:hover .dd-m,.dd:focus-within .dd-m{display:block}.dd-m button{display:block;width:100%;text-align:start}
 .sk-clan .sh{background:linear-gradient(180deg,color-mix(in srgb,var(--sun) 40%,#fff),#fff)}
 .sk-clan .sh-nav{background:color-mix(in srgb,var(--sun) 55%,#fff)}
-.sk-exemore .sh{background:#fff;border-bottom:1px solid var(--line)}.sk-exemore .sh-top{grid-template-columns:auto 1fr auto}.sk-exemore .sh-logo{grid-column:1;text-align:start;color:var(--c)}
+.sk-exemore .sh{background:#fff;border-bottom:1px solid var(--line)}
+.sk-exemore .sh-top{grid-template-columns:auto 1fr auto}.sk-exemore .sh-logo{grid-column:1;text-align:start;color:var(--c)}
 .sk-exemore .sh-search{grid-column:2;max-width:none}
 .sk-exemore .sh-nav{background:var(--paper)}.sk-exemore .dd-b{background:#F39C1F!important}
 .sk-defacto .sh{background:#fff;border-bottom:1px solid var(--line)}

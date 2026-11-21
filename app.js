@@ -17,20 +17,6 @@ const tr = m => {
   return 'حصلت مشكلة: ' + m;
 };
 
-function setSeo({ title, description, image }) {
-  const t = title || C.PLATFORM_NAME;
-  const d = description || 'منصة surehgo لإنشاء المواقع والمتاجر الإلكترونية بسهولة.';
-  document.title = t;
-  const setMeta = (id, attr, val) => {
-    const el = document.getElementById(id);
-    if (el) el.setAttribute(attr, val);
-  };
-  setMeta('meta-desc', 'content', d);
-  setMeta('og-title', 'content', t);
-  setMeta('og-desc', 'content', d);
-  if (image) setMeta('og-image', 'content', image);
-}
-
 function status(p) {
   if (p.plan === 'trial') {
     const d = daysLeft(p.trial_ends_at);
@@ -91,7 +77,7 @@ function home(m) {
 }
 
 function signup(m) {
-  m.innerHTML = '<section class="wrap"><h1>إنشاء حساب</h1><form class="card"><label>الاسم<input class="rtl" name="name" required maxlength="100" autocomplete="name"></label><label>البريد الإلكتروني<input name="email" type="email" required autocomplete="email"></label><label>رقم الهاتف<input name="phone" type="tel" required maxlength="20" autocomplete="tel"></label><label>كلمة المرور (8 أحرف على الأقل)<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label><span><input type="checkbox" required> أوافق على <a href="#/terms">شروط الاستخدام</a> و<a href="#/privacy">سياسة الخصوصية</a></span></label><button class="btn">ابدأ التجربة المجانية</button><div class="msg" role="alert"></div></form><p>عندك حساب؟ <a href="#/login">سجّل الدخول</a></p></section>';
+  m.innerHTML = '<section class="wrap"><h1>إنشاء حساب</h1><form class="card"><label>الاسم<input class="rtl" name="name" required maxlength="100" autocomplete="name"></label><label>البريد الإلكتروني<input name="email" type="email" required autocomplete="email"></label><label>رقم الهاتف<input name="phone" type="tel" required maxlength="20" autocomplete="tel"></label><label>كلمة المرور (8 أحرف على الأقل)<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label><span><input type="checkbox" required> أوافق على <a href="#/terms">شروط الاستخدام</a></span></label><button class="btn">ابدأ التجربة المجانية</button><div class="msg" role="alert"></div></form><p>عندك حساب؟ <a href="#/login">سجّل الدخول</a></p></section>';
   m.querySelector('form').onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(e.target), msg = m.querySelector('.msg'); msg.className = 'msg'; msg.textContent = '';
@@ -148,23 +134,9 @@ const siteErr = e => e.code === '23505' ? 'الرابط ده مستخدم. اخ�
 
 async function siteView(slug) {
   const { data } = await sb.from('sites').select('*').eq('slug', slug).maybeSingle();
-  if (!data) {
-    setSeo({ title: C.PLATFORM_NAME, description: 'الموقع المطلوب غير موجود.' });
-    root.innerHTML = '<main class="wrap"><h1>الموقع غير موجود</h1><p><a href="#/">الرجوع إلى ' + esc(C.PLATFORM_NAME) + '</a></p></main>';
-    return;
-  }
-  if (data.status === 'suspended') {
-    setSeo({ title: data.name + ' | ' + C.PLATFORM_NAME, description: 'تم إيقاف هذا الموقع من إدارة المنصة.' });
-    root.innerHTML = '<main class="wrap"><h1>هذا الموقع موقوف</h1><p>تم إيقاف هذا الموقع من إدارة المنصة.</p></main>';
-    return;
-  }
-  const thObj = (data.theme && typeof data.theme === 'object') ? data.theme : {};
-  const shareImg = okUrl(thObj.banner, U_HTTPS) || okUrl(thObj.logo, U_HTTPS) || okUrl((window.APP_SETTINGS || {}).hero_image, U_HTTPS) || '';
-  setSeo({
-    title: data.name + ' | ' + C.PLATFORM_NAME,
-    description: data.description || ('تصفح ' + data.name + ' على ' + C.PLATFORM_NAME),
-    image: shareImg
-  });
+  if (!data) { root.innerHTML = '<main class="wrap"><h1>الموقع غير موجود</h1><p><a href="#/">الرجوع إلى ' + esc(C.PLATFORM_NAME) + '</a></p></main>'; return; }
+  if (data.status === 'suspended') { root.innerHTML = '<main class="wrap"><h1>هذا الموقع موقوف</h1><p>تم إيقاف هذا الموقع من إدارة المنصة.</p></main>'; return; }
+  document.title = data.name;
   const ph = (data.phone || '').replace(/[^0-9+]/g, '');
   const ST = siteTheme(data.theme);
   root.innerHTML = '<div class="site' + ST.cls + '" style="--c:' + esc(safeCol(data.color)) + ';--t:' + (lum(safeCol(data.color)) > 150 ? '#10202B' : '#fff') + esc(ST.style) + '"><header class="s-hero"><div class="s-in">' + ST.logo + '<h1>' + esc(data.name) + '</h1><p>' + esc(data.description) + '</p>' + (ph ? '<a class="s-btn" href="tel:' + ph + '">اتصل بنا</a>' : '') + '</div></header><main class="s-body">' +
@@ -263,7 +235,7 @@ async function admin(m) {
     '<label>وصف ومميزات الباقة<textarea class="rtl" name="description" rows="3" maxlength="500" placeholder="اكتب للعميل ما الذي تتضمنه الباقة"></textarea></label>' +
     '<div class="thg"><label>السعر قبل الخصم<input name="original_price" type="number" min="0" step="0.01" value="0" required></label><label>نسبة الخصم %<input name="discount_percent" type="number" min="0" max="100" value="0" required></label><label>السعر بعد الخصم<input name="price" type="number" readonly></label><label>مدة الباقة بالأيام<input name="duration_days" type="number" min="1" max="3650" value="30" required></label>' +
     '<label>عدد المواقع المسموح (-1 = غير محدود)<input name="max_sites" type="number" min="-1" value="1" required></label><label>عدد المنتجات لكل موقع (-1 = غير محدود)<input name="max_products" type="number" min="-1" value="0" required></label></div>' +
-    '<button class="btn">إضافة الباقة</button></form><h2>الباقات الحالية</h2>' + (plans.length ? '<div class="tbl"><table><tr><th>الباقة</th><th>السعر والخصم</th><th>المدة</th><th>حد الاستخدام</th><th>الحالة</th><th></th></tr>' + plans.map(x => '<tr><td><b>' + esc(x.name) + '</b><br><small>' + esc(x.description) + '</small></td><td>' + (x.original_price > x.price ? '<s>' + esc(x.original_price) + '</s> خصم ' + esc(x.discount_percent) + '%<br><b>' + esc(x.price) + ' جنيه</b>' : esc(x.price) + ' جنيه') + '</td><td>' + esc(x.duration_days) + ' يوم</td><td>' + (x.max_sites === -1 ? 'مواقع غير محدودة' : esc(x.max_sites) + ' مواقع') + '<br>' + (x.max_products === -1 ? 'منتجات غير محدودة' : esc(x.max_products) + ' منتج') + '</td><td>' + (x.active ? 'متاحة' : 'مخفية') + '</td><td><button type="button" class="btn sm" data-a="pedit" data-id="' + esc(x.id) + '">تعديل</button> <button type="button" class="btn sm ghost" data-a="pact" data-id="' + esc(x.id) + '" data-v="' + !x.active + '">' + (x.active ? 'إخفاء' : 'إظهار') + '</button> <button type="button" class="btn sm warn" data-a="pdel" data-id="' + esc(x.id) + '">حذف</button></td></tr>').join('') + '</table></div>' : '<p>لسه مفيش باقات.</p>');
+    '<button class="btn">إضافة الباقة</button></form><h2>الباقات الحالية</h2>' + (plans.length ? '<div class="tbl"><table><tr><th>الباقة</th><th>السعر والخصم</th><th>المدة</th><th>حد الاستخدام</th><th>الحالة</th><th></th></tr>' + plans.map(x => '<tr><td><b>' + esc(x.name) + '</b><br><small>' + esc(x.description) + '</small></td><td>' + (x.original_price > x.price ? '<s>' + esc(x.original_price) + '</s> خصم ' + esc(x.discount_percent) + '%<br><b>' + esc(x.price) + ' جنيه</b>' : esc(x.price) + ' جنيه') + '</td><td>' + esc(x.duration_days) + ' يوم</td><td>' + (x.max_sites === -1 ? 'مواقع غير محدودة' : esc(x.max_sites) + ' مواقع') + '<br>' + (x.max_products === -1 ? 'منتجات غير محدودة' : esc(x.max_products) + ' منتجات') + '</td><td>' + (x.active ? 'متاحة' : 'مخفية') + '</td><td><button type="button" class="btn sm" data-a="pedit" data-id="' + esc(x.id) + '">تعديل</button> <button type="button" class="btn sm ghost" data-a="pact" data-id="' + esc(x.id) + '" data-v="' + !x.active + '">' + (x.active ? 'إخفاء' : 'إظهار') + '</button> <button type="button" class="btn sm warn" data-a="pdel" data-id="' + esc(x.id) + '">حذف</button></td></tr>').join('') + '</table></div>' : '<p>لسه مفيش باقات.</p>');
   const assetHtml = '<h2>مكتبة صور المواقع</h2><p class="hint">ارفع الصور مرة واحدة، وهتظهر لصاحب الموقع في قائمة الاختيار داخل البنّاء.</p>' +
     '<form class="card" id="assetf"><label>اسم الصورة<input name="title" required maxlength="100"></label><label>القسم<input name="category" maxlength="50" placeholder="مطاعم، أزياء، خلفيات"></label><label>الصورة<input name="image" type="file" accept="image/jpeg,image/png,image/webp" required></label><button class="btn">رفع وإضافة للمكتبة</button></form>' +
     (lib && lib.error ? '<p class="msg">شغّل ملف SQL الخاص بالمكتبة أولًا.</p>' : assets.length ? '<div class="tbl"><table><tr><th>معاينة</th><th>الاسم</th><th>القسم</th><th>الحالة</th><th>إجراء</th></tr>' + assets.map(x => '<tr><td><img src="' + esc(x.url) + '" alt="" style="width:72px;height:52px;object-fit:cover;border-radius:8px"></td><td>' + esc(x.title) + '</td><td>' + esc(x.category) + '</td><td>' + (x.active ? 'متاحة' : 'مخفية') + '</td><td class="act"><button class="btn sm ghost" data-a="alib" data-id="' + esc(x.id) + '" data-v="' + !x.active + '">' + (x.active ? 'إخفاء' : 'إظهار') + '</button><button class="btn sm warn" data-a="adel" data-id="' + esc(x.id) + '">حذف</button></td></tr>').join('') + '</table></div>' : '<p>مكتبة الصور فاضية.</p>');
@@ -306,7 +278,7 @@ async function admin(m) {
     (x.id === me.id ? '' : '<button class="btn sm ' + (x.is_disabled ? '' : 'warn') + '" data-a="dis" data-id="' + x.id + '" data-v="' + !x.is_disabled + '">' + (x.is_disabled ? 'تفعيل الحساب' : 'تعطيل') + '</button><button class="btn sm warn" data-a="udel" data-id="' + x.id + '" data-email="' + esc(x.email) + '">حذف الحساب</button>') +
     '<button class="btn sm" data-a="assign" data-id="' + x.id + '">إسناد باقة</button>' + (x.subscription_plan_id ? '<button class="btn sm ghost" data-a="renew" data-id="' + x.id + '" data-pid="' + esc(x.subscription_plan_id) + '">تجديد وإضافة أيام</button>' : '') + '<button class="btn sm ghost" data-a="bonus" data-id="' + x.id + '" data-bonus="' + Number(x.site_limit_bonus || 0) + '">زيادة حد المواقع (' + Number(x.site_limit_bonus || 0) + ')</button>' + (x.plan !== 'trial' && x.plan_ends_at && daysLeft(x.plan_ends_at) > 0 ? '<button class="btn sm warn" data-a="cancel" data-id="' + x.id + '">إلغاء الاشتراك</button>' : '') + '<button class="btn sm ghost" data-a="plan" data-id="' + x.id + '" data-p="trial" data-d="' + esc(cfg.trial_days || '3') + '">تجربة +' + esc(cfg.trial_days || '3') + ' أيام</button></td></tr>').join('') + '</table></div>' +
     '</div><div class="tab" id="t-sites" hidden><h2>المواقع</h2><div class="tbl"><table><tr><th>الموقع</th><th>الرابط</th><th>النوع</th><th>صاحب الموقع</th><th>الحالة</th><th>إجراءات</th></tr>' +
-    (sites.length ? sites.map(x => '<tr><td>' + esc(x.name) + '</td><td><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(x.slug) + '</a></td><td>' + TYPE_NAMES[x.site_type] + '</td><td dir="ltr">' + esc(email[x.owner_id] || '') + '</td><td>' + (x.status === 'active' ? 'شغال' : 'موقوف') + '</td><td class="act"><a class="btn sm" href="#/builder/' + esc(x.id) + '">تعديل بالماوس</a><button class="btn sm ' + (x.status === 'active' ? 'warn' : '') + '" data-a="site" data-id="' + x.id + '" data-s="' + (x.status === 'active' ? 'suspended' : 'active') + '">' + (x.status === 'active' ? 'إيقاف' : 'تشغيل') + '</button><button class="btn sm ghost" data-a="move" data-id="' + esc(x.id) + '">نقل الملكية</button><button class="btn sm ghost" data-a="tpl" data-id="' + esc(x.id) + '">حفظ كقالب</button><button class="btn sm warn" data-a="sdel" data-id="' + esc(x.id) + '">حذف الموقع</button></td></tr>').join('') : '<tr><td colspan="6">مفيش مواقع لسه.</td></tr>') + '</table></div></div></section>';
+    (sites.length ? sites.map(x => '<tr><td>' + esc(x.name) + '</td><td><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(x.slug) + '</a></td><td>' + TYPE_NAMES[x.site_type] + '</td><td dir="ltr">' + esc(email[x.owner_id] || '') + '</td><td>' + (x.status === 'active' ? 'شغال' : 'موقوف') + '</td><td class="act"><a class="btn sm" href="#/builder/' + esc(x.id) + '">تعديل بالماوس</a><button class="btn sm ' + (x.status === 'active' ? 'warn' : '') + '" data-a="site" data-id="' + x.id + '" data-s="' + (x.status === 'active' ? 'suspended' : 'active') + '">' + (x.status === 'active' ? 'إيقاف' : 'تشغيل') + '</button><button class="btn sm ghost" data-a="move" data-id="' + esc(x.id) + '">نقل الملكية</button><button class="btn sm ghost" data-a="tpl" data-id="' + x.id + '">حفظ كقالب</button><button class="btn sm warn" data-a="sdel" data-id="' + x.id + '">حذف الموقع</button></td></tr>').join('') : '<tr><td colspan="6">مفيش مواقع لسه.</td></tr>') + '</table></div></div></section>';
   const showTab = t => {
     window._adminTab = t;
     m.querySelectorAll('.tab').forEach(d => d.hidden = d.id !== 't-' + t);
@@ -627,10 +599,6 @@ function terms(m) {
   m.innerHTML = '<section class="wrap"><h1>شروط الاستخدام</h1><p>باستخدامك ' + esc(C.PLATFORM_NAME) + ' فأنت توافق على الآتي:</p><ol><li>أنت المسؤول عن محتوى موقعك وصحته، وعن أي صور أو فيديوهات ترفعها.</li><li>يُمنع نشر أي محتوى مخالف للقانون، أو مسيء، أو ينتهك حقوق الآخرين، أو يتضمن احتيالاً.</li><li>من حق إدارة المنصة إيقاف أو حذف أي موقع أو تعطيل أي حساب يخالف هذه الشروط، دون إخطار مسبق.</li><li>التجربة المجانية مدتها 3 أيام، وتعرض إعلانات على المواقع المجانية.</li><li>الاشتراكات المدفوعة غير قابلة للاسترداد إلا بقرار من الإدارة.</li><li>قد نحدّث هذه الشروط، واستمرارك في الاستخدام يعني موافقتك عليها.</li></ol><p><a href="#/">الرجوع للرئيسية</a></p></section>';
 }
 
-function privacy(m) {
-  m.innerHTML = '<section class="wrap"><h1>سياسة الخصوصية</h1><p>توضح هذه السياسة كيفية تعامل منصة ' + esc(C.PLATFORM_NAME) + ' مع البيانات:</p><ol><li><b>بيانات الحساب والمواقع:</b> نجمع الاسم والبريد الإلكتروني ورقم الهاتف وبيانات المواقع والمنتجات والصور المرفوعة لتشغيل الحساب وإدارة الموقع.</li><li><b>بيانات الطلبات والحجوزات:</b> تُستخدم بيانات العملاء (الاسم، الهاتف، العنوان، الموعد، الملاحظات) لإتمام الطلبات والحجوزات وتقديم خدمة المتابعة لصاحب الموقع المعني.</li><li><b>مشاركة البيانات:</b> تظهر بيانات الطلبات والحجوزات لصاحب الموقع صاحب النشاط لإتمام الخدمة، ولا نبيع بيانات العملاء لأطراف ثالثة.</li><li><b>الأمان والاحتفاظ:</b> نعتمد على اتصال مشفر (HTTPS) وصلاحيات وصول مقيدة في قاعدة البيانات لحماية البيانات، ويمكن طلب تعديل أو حذف البيانات عبر التواصل مع الإدارة.</li></ol><p><a href="#/">الرجوع للرئيسية</a></p></section>';
-}
-
 function subscriptionsPage(m) {
   if (!me) { location.hash = '#/login'; return; }
   const current = (window.APP_PLANS || []).find(p => p.id === me.subscription_plan_id);
@@ -648,7 +616,7 @@ function subscriptionsPage(m) {
   };
 }
 
-const routes = { '/': home, '/login': login, '/signup': signup, '/dashboard': dashboard, '/subscriptions': subscriptionsPage, '/admin': admin, '/terms': terms, '/privacy': privacy, '/theme': themePage };
+const routes = { '/': home, '/login': login, '/signup': signup, '/dashboard': dashboard, '/subscriptions': subscriptionsPage, '/admin': admin, '/terms': terms, '/theme': themePage };
 
 async function loadSettings() {
   try {
@@ -675,10 +643,10 @@ async function route() {
   if (/[?&]success=true/.test(location.hash)) notice = 'تم استلام الدفع. اشتراكك بيتفعّل خلال لحظات، حدّث الصفحة لو الحالة ما اتغيرتش.';
   else if (/[?&]success=false/.test(location.hash)) notice = 'عملية الدفع ما اكتملتش. ما اتخصمش منك أي مبلغ، تقدر تجرّب تاني.';
   if (h.startsWith('/s/')) { await siteView(decodeURIComponent(h.slice(3)).toLowerCase()); return; }
-  setSeo({ title: C.PLATFORM_NAME, description: (window.APP_SETTINGS && window.APP_SETTINGS.hero_text) || 'منصة surehgo لإنشاء المواقع والمتاجر الإلكترونية بسهولة.', image: (window.APP_SETTINGS && window.APP_SETTINGS.hero_image) || '' });
+  document.title = C.PLATFORM_NAME;
   window._pc = 0;
   if (me && me.role === 'super_admin') { try { window._pc = (await sb.from('payment_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending')).count || 0; } catch {} }
-  root.innerHTML = nav() + (notice ? '<div class="banner" role="alert">' + esc(notice) + '</div>' : '') + '<main></main><footer><span>© ' + new Date().getFullYear() + ' ' + esc(C.PLATFORM_NAME) + '</span><div><a href="#/terms">شروط الاستخدام</a> · <a href="#/privacy">سياسة الخصوصية</a></div></footer>';
+  root.innerHTML = nav() + (notice ? '<div class="banner" role="alert">' + esc(notice) + '</div>' : '') + '<main></main><footer><span>© ' + new Date().getFullYear() + ' ' + esc(C.PLATFORM_NAME) + '</span><a href="#/terms">شروط الاستخدام</a></footer>';
   notice = '';
   const main = root.querySelector('main');
   if (h.startsWith('/manage/')) await manage(main, h.slice(8)); else if (h.startsWith('/builder/')) await builder(main, h.slice(9)); else if (h.startsWith('/edit/')) await editSite(main, h.slice(6)); else await (routes[h] || home)(main);

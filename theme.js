@@ -15,10 +15,8 @@ const TH_PRESETS = [
   { n: 'وردي', c: ['#BE185D', '#38BDF8', '#3B0A21', '#FFF1F6', '#F9CFE0'] }
 ];
 const parsePresets = s => { try { const a = JSON.parse(s || '[]'); return (Array.isArray(a) ? a : []).filter(p => p && typeof p.n === 'string' && Array.isArray(p.c) && p.c.length === 5 && p.c.every(x => /^#[0-9a-f]{6}$/i.test(x))).slice(0, 12); } catch { return []; } };
-const fontList = g => {
-  const extra = String((g || {}).theme_fonts_extra || '').split(',').map(x => x.trim()).filter(x => /^[A-Za-z0-9 ]{2,40}$/.test(x) && !TH_FONTS.includes(x));
-  return [...new Set([...extra, ...TH_FONTS])].slice(0, 20);
-};
+// الخطوط الإضافية: أسماء من Google Fonts بحروف وأرقام ومسافات بس
+const fontList = g => TH_FONTS.concat(String((g || {}).theme_fonts_extra || '').split(',').map(x => x.trim()).filter(x => /^[A-Za-z0-9 ]{2,40}$/.test(x) && !TH_FONTS.includes(x))).slice(0, 14);
 function loadFont(f) {
   if (f === 'Cairo' || document.getElementById('th-font:' + f)) return;
   const l = document.createElement('link');
@@ -83,6 +81,7 @@ function themePage(m) {
   };
 }
 
+// ====== مظهر كل موقع على حدة (صاحب الموقع بيتحكم فيه من "البيانات") ======
 function themeFields(t) {
   t = t && typeof t === 'object' ? t : {};
   const ok = (c, d) => /^#[0-9a-f]{6}$/i.test(c || '') ? c : d;
@@ -115,6 +114,7 @@ function siteTheme(t) {
   return { style: s, logo: lg ? '<img class="s-logo" src="' + lg + '" alt="">' : '', gallery, cls: (t.hero === 'grad' || t.hero === 'glass' ? ' h-' + t.hero : '') + (t.anim === true ? ' anim' : '') + (['clan', 'exemore', 'defacto'].includes(t.skin) ? ' sk-' + t.skin : '') + (bn ? ' has-bn' : '') };
 }
 
+// قراءة مظهر الموقع مع رفع اللوجو والبانر لو العميل اختار صور جديدة
 async function siteThemeFrom(f, old) {
   const th = readSiteTheme(f); old = old && typeof old === 'object' ? old : {};
   for (const [k, field] of [['logo', 't_logofile'], ['banner', 't_bannerfile']]) {
@@ -130,3 +130,4 @@ async function siteThemeFrom(f, old) {
   }
   return th;
 }
+
