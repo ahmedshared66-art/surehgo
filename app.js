@@ -176,7 +176,7 @@ async function dashboard(m) {
     e.preventDefault();
     const f = new FormData(nf), msg = nf.querySelector('.msg'); msg.textContent = '';
     const tpl = tpls.find(t => t.id === f.get('tpl'));
-    const row = { slug: f.get('slug').trim().toLowerCase(), name: f.get('name').trim(), site_type: (tpl && tpl.site_type) || f.get('type'), description: f.get('description').trim() || (tpl && tpl.description) || '', color: f.get('color'), phone: f.get('phone').trim() };
+    const row = { owner_id: me.id, slug: f.get('slug').trim().toLowerCase(), name: f.get('name').trim(), site_type: (tpl && tpl.site_type) || f.get('type'), description: f.get('description').trim() || (tpl && tpl.description) || '', color: f.get('color'), phone: f.get('phone').trim() };
     if (tpl) { row.content = arr(tpl.content).slice(0, 40); row.theme = tpl.theme && typeof tpl.theme === 'object' ? tpl.theme : {}; if (/^#[0-9a-f]{6}$/i.test(tpl.color || '')) row.color = tpl.color; }
     const { error } = await sb.from('sites').insert(row);
     if (error) { msg.textContent = siteErr(error); return; }
