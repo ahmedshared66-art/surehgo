@@ -48,10 +48,24 @@ function nav() {
   const currentPlan = me && (window.APP_PLANS || []).find(p => p.id === me.subscription_plan_id);
   const remaining = me ? status(me) : null;
   const links = me
-    ? '<a href="#/dashboard">لوحتي</a><a class="notify-link" href="#/notifications" aria-label="الإشعارات">الإشعارات' + (window._unreadN ? ' <span class="cnt">' + window._unreadN + '</span>' : '') + '</a>' + (me.role === 'super_admin' ? '<a href="#/admin">لوحة الأدمن' + (window._pc ? ' <span class="cnt">' + window._pc + '</span>' : '') + '</a><a href="#/theme">المظهر</a>' : '') + '<button id="logout" class="btn ghost">تسجيل الخروج</button>'
+    ? '<a href="#/dashboard">لوحتي</a><a class="notify-link" href="#/notifications" aria-label="الإشعارات"><span aria-hidden="true">🔔</span><span>الإشعارات</span><i data-notify-count' + (window._unreadN ? '' : ' hidden') + '>' + (window._unreadN || '') + '</i></a>' + (me.role === 'super_admin' ? '<a href="#/admin">لوحة الأدمن' + (window._pc ? ' <span class="cnt">' + window._pc + '</span>' : '') + '</a><a href="#/theme">المظهر</a>' : '') + '<button id="logout" class="btn ghost">تسجيل الخروج</button>'
     : '<a href="#/login">تسجيل الدخول</a><a class="btn" href="#/signup">إنشاء حساب</a>';
   const sub = me ? '<a class="subnav" href="#/subscriptions">الاشتراك <small>' + esc(currentPlan ? currentPlan.name : (me.plan === 'trial' ? 'تجربة مجانية' : planName(me.plan))) + ' · ' + esc(remaining.text) + '</small></a>' : '';
   return '<header class="nav"><div class="nav-main"><a class="brand" href="#/">' + esc(C.PLATFORM_NAME) + '</a>' + sub + '</div><nav>' + links + '</nav></header>';
+}
+
+async function refreshNotificationBell(userId) {
+  if (!userId) return;
+  const { count, error } = await sb.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('read_at', null);
+  if (error) return;
+  window._unreadN = count || 0;
+  document.querySelectorAll('[data-notify-count]').forEach(x => { x.textContent = window._unreadN || ''; x.hidden = !window._unreadN; });
+}
+function startNotificationPolling(userId) {
+  if (window._notificationPoll) clearInterval(window._notificationPoll);
+  if (!userId) return;
+  refreshNotificationBell(userId);
+  window._notificationPoll = setInterval(() => refreshNotificationBell(userId), 12000);
 }
 
 async function notificationsPage(m) {
@@ -73,6 +87,43 @@ async function notificationsPage(m) {
     await sb.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', n.id);
     window._unreadN = Math.max(0, (window._unreadN || 0) - 1); card.classList.remove('unread');
   }));
+}
+
+async function siteInbox(m, siteId) {
+  if (!me) { location.hash = '#/login'; return; }
+  const { data: site } = await sb.from('sites').select('id,name,owner_id').eq('id', siteId).maybeSingle();
+  if (!site || (site.owner_id !== me.id && me.role !== 'super_admin')) { location.hash = '#/dashboard'; return; }
+  m.innerHTML = '<section class="wrap inbox-page"><div class="inbox-heading"><div><h1>صندوق الرسائل</h1><p class="hint">رسائل الزوار لموقع ' + esc(site.name) + '</p></div><a class="btn ghost" href="#/dashboard">رجوع لمواقعي</a></div><div class="inbox-layout"><aside class="inbox-threads" id="inbox-threads"><p class="hint">جاري تحميل الرسائل...</p></aside><div class="inbox-chat" id="inbox-chat"><div class="notification-empty">اختار محادثة عشان ترد عليها.</div></div></div></section>';
+  let active = null, rows = [];
+  const threadBox = m.querySelector('#inbox-threads'), chatBox = m.querySelector('#inbox-chat');
+  async function loadInbox() {
+    const { data, error } = await sb.rpc('owner_site_conversations', { p_site: site.id });
+    if (error) { threadBox.innerHTML = '<p class="msg">تعذر تحميل الرسائل. شغّل ملف notifications-and-chat.sql في Supabase.</p>'; return; }
+    rows = data || [];
+    if (!active || !rows.some(x => x.conversation_id === active)) active = rows[0] && rows[0].conversation_id;
+    threadBox.innerHTML = rows.length ? rows.map(x => '<button type="button" class="inbox-thread' + (x.conversation_id === active ? ' active' : '') + '" data-conversation="' + esc(x.conversation_id) + '"><b>' + esc(x.visitor_name) + '</b><small dir="ltr">' + esc(x.visitor_phone) + '</small><span>' + esc(x.last_message) + '</span><time>' + new Date(x.last_message_at).toLocaleString('ar-EG') + '</time></button>').join('') : '<div class="notification-empty"><b>مفيش رسائل لسه</b><p>لما زائر يبعت رسالة من موقعك هتظهر هنا.</p></div>';
+    if (active) await loadThread(); else chatBox.innerHTML = '<div class="notification-empty">مفيش محادثات لسه.</div>';
+  }
+  async function loadThread() {
+    const t = rows.find(x => x.conversation_id === active); if (!t) return;
+    const draft = chatBox.dataset.conversation === active ? (chatBox.querySelector('.inbox-reply textarea')?.value || '') : '';
+    const { data, error } = await sb.rpc('owner_site_messages', { p_conversation: active });
+    if (error) { chatBox.innerHTML = '<p class="msg">تعذر فتح المحادثة.</p>'; return; }
+    chatBox.innerHTML = '<header><div><b>' + esc(t.visitor_name) + '</b><small dir="ltr">' + esc(t.visitor_phone) + '</small></div><a class="btn sm ghost" href="tel:' + esc(String(t.visitor_phone).replace(/[^0-9+]/g,'')) + '">اتصال</a></header><div class="inbox-messages">' + (data || []).map(x => '<div class="chat-bubble ' + (x.sender === 'owner' ? 'from-owner' : 'from-visitor') + '">' + esc(x.body) + '<small>' + new Date(x.created_at).toLocaleString('ar-EG') + '</small></div>').join('') + '</div><form class="inbox-reply"><textarea name="body" rows="2" maxlength="2000" required placeholder="اكتب ردك..."></textarea><button class="btn">إرسال الرد</button></form>';
+    chatBox.dataset.conversation = active; chatBox.querySelector('.inbox-reply textarea').value = draft;
+    chatBox.querySelector('.inbox-reply').onsubmit = async e => {
+      e.preventDefault(); const body = new FormData(e.currentTarget).get('body').trim(); if (!body) return;
+      const btn = e.currentTarget.querySelector('button'); btn.disabled = true;
+      const { error: sendError } = await sb.rpc('owner_site_reply', { p_conversation: active, p_body: body });
+      if (sendError) alert('تعذر إرسال الرد: ' + sendError.message); else await loadInbox();
+      btn.disabled = false;
+    };
+    const feed = chatBox.querySelector('.inbox-messages'); feed.scrollTop = feed.scrollHeight;
+  }
+  threadBox.onclick = e => { const b = e.target.closest('[data-conversation]'); if (!b) return; active = b.dataset.conversation; loadInbox(); };
+  await loadInbox();
+  if (window._inboxPoll) clearInterval(window._inboxPoll);
+  window._inboxPoll = setInterval(() => { if (location.hash.includes('/inbox/')) loadInbox(); }, 9000);
 }
 
 const TYPES = ['مطعم','متجر','شركة','عيادة','مدرسة','موقع شخصي','فندق'];
@@ -210,6 +261,7 @@ async function siteView(slug) {
   siteExtras(data);
   siteEnhance();
   addOwnerSiteToolbar(data);
+  if (window.initSiteChat) initSiteChat(data);
 }
 
 async function addOwnerSiteToolbar(site) {
@@ -217,7 +269,8 @@ async function addOwnerSiteToolbar(site) {
     if (!me) await loadMe();
     if (!me || me.id !== site.owner_id || document.getElementById('site-owner-toolbar')) return;
     const bar = document.createElement('div'); bar.id = 'site-owner-toolbar'; bar.className = 'site-owner-toolbar';
-    bar.innerHTML = '<b>أنت بتعاين موقعك</b><span class="grow"></span><a class="btn sm" href="#/builder/' + esc(site.id) + '">تعديل مباشر</a><a class="btn sm ghost" href="#/edit/' + esc(site.id) + '">الإعدادات</a><a class="btn sm ghost" href="#/manage/' + esc(site.id) + '">إدارة المتجر</a>';
+    startNotificationPolling(me.id);
+    bar.innerHTML = '<b>أنت بتعاين موقعك</b><span class="grow"></span><a class="owner-bell" href="#/notifications" title="الإشعارات">🔔 <i data-notify-count hidden></i></a><a class="btn sm" href="#/builder/' + esc(site.id) + '">تعديل مباشر</a><a class="btn sm ghost" href="#/inbox/' + esc(site.id) + '">الرسائل</a><a class="btn sm ghost" href="#/edit/' + esc(site.id) + '">الإعدادات</a><a class="btn sm ghost" href="#/manage/' + esc(site.id) + '">إدارة المتجر</a>';
     root.prepend(bar);
   } catch {}
 }
@@ -243,7 +296,7 @@ async function dashboard(m) {
   }
   const canCreate = s.ok && (siteLimit === -1 || sites.length < siteLimit);
   m.innerHTML = '<section class="wrap"><h1>أهلاً ' + esc(me.full_name) + '</h1><div class="status ' + (s.ok ? 'on' : 'off') + '">' + esc(s.text) + '</div>' + (pend.length ? '<div class="banner pend">طلب الاشتراك' + (pend[0].plan_name || (pend[0].plan ? ' ' + planName(pend[0].plan) : '')) + ' بانتظار تأكيد الأدمن. هيتفعّل بعد مراجعة التحويل.</div>' : '') + '<p><a class="btn" href="#/subscriptions">عرض الاشتراكات وتفاصيل باقتي</a></p>' +
-    '<h2>مواقعي</h2>' + (sites.length ? '<ul class="mysites">' + sites.map(x => '<li><div><b>' + esc(x.name) + '</b> <small>(' + TYPE_NAMES[x.site_type] + (x.status === 'suspended' ? ' - موقوف من الإدارة' : '') + ')</small><br><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(siteUrl(x.slug)) + '</a></div><div class="act"><a class="btn sm" href="#/builder/' + x.id + '">بناء الموقع</a><a class="btn sm ghost" href="#/edit/' + x.id + '">البيانات</a><a class="btn sm ghost" href="#/manage/' + x.id + '">المتجر والطلبات</a><button class="btn sm warn" data-del="' + x.id + '">حذف</button></div></li>').join('') + '</ul>' : '<p>لسه معندكش مواقع.</p>') +
+    '<h2>مواقعي</h2>' + (sites.length ? '<ul class="mysites">' + sites.map(x => '<li><div><b>' + esc(x.name) + '</b> <small>(' + TYPE_NAMES[x.site_type] + (x.status === 'suspended' ? ' - موقوف من الإدارة' : '') + ')</small><br><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(siteUrl(x.slug)) + '</a></div><div class="act"><a class="btn sm" href="#/builder/' + x.id + '">بناء الموقع</a><a class="btn sm ghost" href="#/edit/' + x.id + '">البيانات</a><a class="btn sm ghost" href="#/manage/' + x.id + '">المتجر والطلبات</a><a class="btn sm ghost" href="#/inbox/' + x.id + '">الرسائل</a><button class="btn sm warn" data-del="' + x.id + '">حذف</button></div></li>').join('') + '</ul>' : '<p>لسه معندكش مواقع.</p>') +
     (canCreate ? '<h2>إنشاء موقع جديد</h2><form class="card" id="nf"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80"></label><label>الرابط (حروف إنجليزية صغيرة وأرقام وشرطة)<input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,29}" maxlength="30" placeholder="my-restaurant"></label><label>نوع النشاط<select name="type">' + Object.keys(TYPE_NAMES).map(k => '<option value="' + k + '">' + TYPE_NAMES[k] + '</option>').join('') + '</select></label><div class="design-pick"><b>اختار تصميم البداية</b><p class="hint">هتقدر تغيّر الصور والأقسام والألوان بعد الإنشاء.</p><div id="design-gallery">' + designGallery('restaurant','modern') + '</div></div>' + (tpls.length ? '<label>أو ابدأ من قالب محفوظ<select name="tpl"><option value="">استخدم التصميم المختار</option>' + tpls.map(t => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join('') + '</select></label>' : '') + '<label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600"></textarea></label><label>اللون المفضل<input type="color" name="color" value="#0B5C6B"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20"></label><button class="btn">إنشاء الموقع</button><div class="msg" role="alert"></div></form>'
       : '<p class="msg">' + (s.ok ? 'وصلت للحد الأقصى (' + (siteLimit === -1 ? 'غير محدود' : siteLimit) + ' مواقع).' : 'مينفعش تنشئ مواقع جديدة لأن التجربة أو الاشتراك انتهى.') + '</p>') + '</section>';
   const nf = m.querySelector('#nf');
@@ -787,6 +840,8 @@ async function loadSettings() {
 
 async function route() {
   try {
+  if (window._inboxPoll) { clearInterval(window._inboxPoll); window._inboxPoll = null; }
+  if (window._siteChatPoll) { clearInterval(window._siteChatPoll); window._siteChatPoll = null; }
   const h = (location.hash.slice(1) || '/').split('?')[0];
   const ps = pathSlug();
   // Public customer sites should render without waiting for admin settings or login checks.
@@ -796,6 +851,7 @@ async function route() {
   if (dom && h === '/') { await siteView(dom); return; }
   await loadSettings();
   await loadMe();
+  startNotificationPolling(me && me.id);
   window._unreadN = 0;
   if (me) { try { window._unreadN = (await sb.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', me.id).is('read_at', null)).count || 0; } catch {} }
   if (/[?&]success=true/.test(location.hash)) notice = 'تم استلام الدفع. اشتراكك بيتفعّل خلال لحظات، حدّث الصفحة لو الحالة ما اتغيرتش.';
@@ -806,7 +862,7 @@ async function route() {
   root.innerHTML = nav() + (notice ? '<div class="banner" role="alert">' + esc(notice) + '</div>' : '') + '<main></main><footer><span>© ' + new Date().getFullYear() + ' ' + esc(C.PLATFORM_NAME) + '</span><a href="#/terms">شروط الاستخدام</a></footer>';
   notice = '';
   const main = root.querySelector('main');
-  if (h.startsWith('/manage/')) await manage(main, h.slice(8)); else if (h.startsWith('/builder/')) await builder(main, h.slice(9)); else if (h.startsWith('/edit/')) await editSite(main, h.slice(6)); else await (routes[h] || home)(main);
+  if (h.startsWith('/inbox/')) await siteInbox(main, h.slice(7)); else if (h.startsWith('/manage/')) await manage(main, h.slice(8)); else if (h.startsWith('/builder/')) await builder(main, h.slice(9)); else if (h.startsWith('/edit/')) await editSite(main, h.slice(6)); else await (routes[h] || home)(main);
   const lo = document.getElementById('logout');
   if (lo) lo.onclick = async () => { await sb.auth.signOut(); location.hash = '#/'; route(); };
   } catch (err) {
