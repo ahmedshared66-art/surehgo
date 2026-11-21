@@ -55,7 +55,7 @@ const FEATURES = [
 
 function home(m) {
   m.innerHTML =
-  '<section class="hero"><div><span class="badge">3 أيام مجاناً</span><h1>موقعك على الإنترنت في دقائق</h1><p>اختار نوع نشاطك، وابني موقعك بالسحب والإفلات أو بالذكاء الاصطناعي. من غير برمجة.</p><a class="btn" href="' + (me ? '#/dashboard' : '#/signup') + '">إنشاء موقع</a></div>' +
+  '<section class="hero"><div><span class="badge">3 أيام مجاناً</span><h1>' + esc((window.APP_SETTINGS || {}).hero_title || 'موقعك على الإنترنت في دقائق') + '</h1><p>' + esc((window.APP_SETTINGS || {}).hero_text || 'اختار نوع نشاطك، وابني موقعك بالسحب والإفلات أو بالذكاء الاصطناعي. من غير برمجة.') + '</p><a class="btn" href="' + (me ? '#/dashboard' : '#/signup') + '">إنشاء موقع</a></div>' +
   '<div class="frame" aria-hidden="true"><div class="bar"></div><div class="body"><i class="h"></i><i></i><i class="s"></i><div class="drag"></div><div class="row"><i></i><i></i><i></i></div></div></div></section>' +
   '<div class="wrap"><section><h2>اختار نوع موقعك</h2><ul class="types">' + TYPES.map(t => '<li><a href="' + (me ? '#/dashboard' : '#/signup') + '">' + t + '</a></li>').join('') + '</ul></section>' +
   '<section class="sec"><h2>المميزات</h2><ul class="feat">' + FEATURES.map(f => '<li><b>' + f[0] + '</b><span>' + f[1] + '</span></li>').join('') + '</ul></section>' +
@@ -126,16 +126,21 @@ async function dashboard(m) {
   const s = status(me);
   const { data } = await sb.from('sites').select('*').eq('owner_id', me.id).order('created_at', { ascending: false });
   const sites = data || [];
+  const tp = await sb.from('site_templates').select('id,name,site_type,description,content').eq('active', true).order('created_at');
+  const tpls = tp.error ? [] : (tp.data || []);
   const canCreate = s.ok && sites.length < 3;
   m.innerHTML = '<section class="wrap"><h1>أهلاً ' + esc(me.full_name) + '</h1><div class="status ' + (s.ok ? 'on' : 'off') + '">' + esc(s.text) + '</div>' + payHtml() +
     '<h2>مواقعي</h2>' + (sites.length ? '<ul class="mysites">' + sites.map(x => '<li><div><b>' + esc(x.name) + '</b> <small>(' + TYPE_NAMES[x.site_type] + (x.status === 'suspended' ? ' - موقوف من الإدارة' : '') + ')</small><br><a href="#/s/' + esc(x.slug) + '" target="_blank" dir="ltr">' + esc(siteUrl(x.slug)) + '</a></div><div class="act"><a class="btn sm" href="#/builder/' + x.id + '">بناء الموقع</a><a class="btn sm ghost" href="#/edit/' + x.id + '">البيانات</a><a class="btn sm ghost" href="#/manage/' + x.id + '">المتجر والطلبات</a><button class="btn sm warn" data-del="' + x.id + '">حذف</button></div></li>').join('') + '</ul>' : '<p>لسه معندكش مواقع.</p>') +
-    (canCreate ? '<h2>إنشاء موقع جديد</h2><form class="card" id="nf"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80"></label><label>الرابط (حروف إنجليزية صغيرة وأرقام وشرطة)<input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,29}" maxlength="30" placeholder="my-restaurant"></label><label>نوع النشاط<select name="type">' + Object.keys(TYPE_NAMES).map(k => '<option value="' + k + '">' + TYPE_NAMES[k] + '</option>').join('') + '</select></label><label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600"></textarea></label><label>اللون المفضل<input type="color" name="color" value="#0B5C6B"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20"></label><button class="btn">إنشاء الموقع</button><div class="msg" role="alert"></div></form>'
+    (canCreate ? '<h2>إنشاء موقع جديد</h2><form class="card" id="nf"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80"></label><label>الرابط (حروف إنجليزية صغيرة وأرقام وشرطة)<input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,29}" maxlength="30" placeholder="my-restaurant"></label><label>نوع النشاط<select name="type">' + Object.keys(TYPE_NAMES).map(k => '<option value="' + k + '">' + TYPE_NAMES[k] + '</option>').join('') + '</select></label>' + (tpls.length ? '<label>ابدأ من قالب جاهز<select name="tpl"><option value="">بدون قالب (موقع فاضي)</option>' + tpls.map(t => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join('') + '</select></label>' : '') + '<label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600"></textarea></label><label>اللون المفضل<input type="color" name="color" value="#0B5C6B"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20"></label><button class="btn">إنشاء الموقع</button><div class="msg" role="alert"></div></form>'
       : '<p class="msg">' + (s.ok ? 'وصلت للحد الأقصى (3 مواقع).' : 'مينفعش تنشئ مواقع جديدة لأن التجربة أو الاشتراك انتهى.') + '</p>') + '</section>';
   const nf = m.querySelector('#nf');
   if (nf) nf.onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(nf), msg = nf.querySelector('.msg'); msg.textContent = '';
-    const { error } = await sb.from('sites').insert({ slug: f.get('slug').trim().toLowerCase(), name: f.get('name').trim(), site_type: f.get('type'), description: f.get('description').trim(), color: f.get('color'), phone: f.get('phone').trim() });
+    const tpl = tpls.find(t => t.id === f.get('tpl'));
+    const row = { slug: f.get('slug').trim().toLowerCase(), name: f.get('name').trim(), site_type: (tpl && tpl.site_type) || f.get('type'), description: f.get('description').trim() || (tpl && tpl.description) || '', color: f.get('color'), phone: f.get('phone').trim() };
+    if (tpl) row.content = arr(tpl.content).slice(0, 40);
+    const { error } = await sb.from('sites').insert(row);
     if (error) { msg.textContent = siteErr(error); return; }
     route();
   };
@@ -163,11 +168,12 @@ async function editSite(m, id) {
 
 async function admin(m) {
   if (!me || me.role !== 'super_admin') { location.hash = '#/'; return; }
-  const [u, st, pr, ss] = await Promise.all([
+  const [u, st, pr, ss, tp] = await Promise.all([
     sb.from('profiles').select('*').order('created_at', { ascending: false }),
     sb.from('sites').select('*').order('created_at', { ascending: false }),
     sb.from('payment_requests').select('*').order('created_at', { ascending: true }),
-    sb.from('app_settings').select('*')
+    sb.from('app_settings').select('*'),
+    sb.from('site_templates').select('*').order('created_at', { ascending: false })
   ]);
   if (u.error || st.error) { m.innerHTML = '<section class="wrap"><div class="msg">' + esc((u.error || st.error).message) + '</div></section>'; return; }
   const users = u.data, sites = st.data, email = {};
@@ -179,10 +185,26 @@ async function admin(m) {
   const launch = cfg.launch_date && !isNaN(new Date(cfg.launch_date)) ? new Date(cfg.launch_date) : firstUser;
   const runDays = Math.max(0, Math.floor((Date.now() - launch) / 864e5));
   const runTxt = runDays === 0 ? 'من النهاردة' : arDays(runDays);
+  const tpls = tp && !tp.error ? tp.data : [];
+  const tplHtml = '<h2>القوالب</h2><p class="hint">عشان تضيف قالب جديد: ابني موقع بالبنّاء زي ما تحب، وبعدين من تبويب المواقع اضغط <b>حفظ كقالب</b>. القالب بيظهر للمستخدمين وهم بينشئوا موقع جديد.</p>' +
+    (tp && tp.error ? '<p class="msg">تأكد إنك شغّلت SQL التحكم الكامل.</p>' : tpls.length ?
+    '<div class="tbl"><table><tr><th>الاسم</th><th>النوع</th><th>عدد العناصر</th><th>الحالة</th><th>إجراءات</th></tr>' +
+    tpls.map(x => '<tr><td>' + esc(x.name) + '</td><td>' + esc(TYPE_NAMES[x.site_type] || '') + '</td><td>' + arr(x.content).length + '</td><td>' + (x.active ? 'ظاهر' : 'مخفي') + '</td><td class="act"><button class="btn sm ghost" data-a="tact" data-id="' + esc(x.id) + '" data-v="' + !x.active + '">' + (x.active ? 'إخفاء' : 'إظهار') + '</button><button class="btn sm warn" data-a="tdel" data-id="' + esc(x.id) + '">حذف</button></td></tr>').join('') + '</table></div>'
+    : '<p>لسه مفيش قوالب.</p>');
+  const TABS = [['req', 'طلبات الاشتراك (' + reqs.length + ')'], ['users', 'المستخدمين'], ['sites', 'المواقع'], ['tpl', 'القوالب (' + tpls.length + ')'], ['set', 'الإعدادات والأسعار']];
+  let curTab = window._adminTab || (reqs.length ? 'req' : 'users');
+  if (!TABS.some(t => t[0] === curTab)) curTab = 'users';
+  const tabsNav = '<nav class="atabs" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 20px">' +
+    TABS.map(t => '<button type="button" class="btn sm' + (t[0] === curTab ? '' : ' ghost') + '" data-tab="' + t[0] + '">' + t[1] + '</button>').join('') + '</nav>';
   const setHtml = '<h2>الإعدادات</h2>' + (ss && ss.error ? '<p class="msg">تأكد إنك شغّلت SQL الإعدادات.</p>' : '') +
     '<form class="card" id="setf"><label>رقم فودافون كاش (اللي العميل بيحوّل عليه)<input name="cash" type="tel" required maxlength="20" value="' + esc(cfg.vodafone_cash || C.VODAFONE_CASH || '') + '"></label>' +
     '<label>رقم واتساب (بالشكل 01xxxxxxxxx)<input name="wa" type="tel" required maxlength="20" value="' + esc(cfg.whatsapp || C.WHATSAPP || '') + '"></label>' +
     '<label>تاريخ بداية تشغيل الموقع<input name="launch" type="date" required value="' + launch.toISOString().slice(0, 10) + '"></label>' +
+    '<label>سعر الاشتراك الشهري (جنيه)<input name="pm" type="number" min="1" step="1" required value="' + esc(cfg.price_monthly || parseFloat(C.PRICE_MONTHLY) || '') + '"></label>' +
+    '<label>سعر الاشتراك السنوي (جنيه)<input name="py" type="number" min="1" step="1" required value="' + esc(cfg.price_yearly || parseFloat(C.PRICE_YEARLY) || '') + '"></label>' +
+    '<label>عنوان الصفحة الرئيسية<input class="rtl" name="ht" maxlength="120" value="' + esc(cfg.hero_title || '') + '" placeholder="موقعك على الإنترنت في دقائق"></label>' +
+    '<label>وصف الصفحة الرئيسية<textarea class="rtl" name="hx" rows="2" maxlength="300" placeholder="اتركه فاضي لاستخدام النص الافتراضي">' + esc(cfg.hero_text || '') + '</textarea></label>' +
+    '<label>نص الإعلان على المواقع المجانية<input class="rtl" name="ad" maxlength="200" value="' + esc(cfg.ad_text || C.AD_TEXT || '') + '"></label>' +
     '<button class="btn">حفظ الإعدادات</button></form>';
   users.forEach(x => byId[x.id] = x);
   const reqHtml = '<h2>طلبات الاشتراك (' + reqs.length + ')</h2>' + (pr && pr.error ? '<p class="msg">تأكد إنك شغّلت SQL طلبات الاشتراك.</p>' : reqs.length ?
@@ -192,13 +214,20 @@ async function admin(m) {
     : '<p>مفيش طلبات جديدة.</p>');
   const paid = users.filter(x => x.plan !== 'trial' && x.plan_ends_at && daysLeft(x.plan_ends_at) > 0).length;
   m.innerHTML = '<section class="wrap" style="max-width:1200px"><h1>لوحة الأدمن</h1><div class="stats"><div>المستخدمين: <b>' + users.length + '</b></div><div>مشتركين حالياً: <b>' + paid + '</b></div><div>معطّلين: <b>' + users.filter(x => x.is_disabled).length + '</b></div><div>المواقع: <b>' + sites.length + '</b></div><div>طلبات اشتراك معلّقة: <b>' + reqs.length + '</b></div><div>إيرادات مؤكدة: <b>' + revenue.toLocaleString('ar-EG') + ' جنيه</b></div><div>المنصة شغالة بقالها: <b>' + runTxt + '</b></div></div><div class="msg" id="amsg" role="alert"></div>' +
-    setHtml + reqHtml +
-    '<h2 style="margin-top:32px">المستخدمين</h2><div class="tbl"><table><tr><th>الاسم</th><th>البريد</th><th>الهاتف</th><th>الباقة</th><th>الحالة</th><th>تاريخ التسجيل</th><th>إجراءات</th></tr>' +
+    tabsNav + '<div class="tab" id="t-set" hidden>' + setHtml + '</div><div class="tab" id="t-tpl" hidden>' + tplHtml + '</div><div class="tab" id="t-req" hidden>' + reqHtml + '</div>' +
+    '<div class="tab" id="t-users" hidden><h2>المستخدمين</h2><div class="tbl"><table><tr><th>الاسم</th><th>البريد</th><th>الهاتف</th><th>الباقة</th><th>الحالة</th><th>تاريخ التسجيل</th><th>إجراءات</th></tr>' +
     users.map(x => '<tr><td>' + esc(x.full_name) + '</td><td dir="ltr">' + esc(x.email) + '</td><td dir="ltr">' + esc(x.phone) + '</td><td>' + planName(x.plan) + (x.role === 'super_admin' ? ' (أدمن)' : '') + '</td><td>' + esc(status(x).text) + (x.is_disabled ? ' - معطّل' : '') + '</td><td>' + new Date(x.created_at).toLocaleDateString('ar-EG') + '</td><td class="act">' +
     (x.id === me.id ? '' : '<button class="btn sm ' + (x.is_disabled ? '' : 'warn') + '" data-a="dis" data-id="' + x.id + '" data-v="' + !x.is_disabled + '">' + (x.is_disabled ? 'تفعيل الحساب' : 'تعطيل') + '</button>') +
     '<button class="btn sm" data-a="plan" data-id="' + x.id + '" data-p="monthly" data-d="30">شهري 30 يوم</button><button class="btn sm" data-a="plan" data-id="' + x.id + '" data-p="yearly" data-d="365">سنوي 365 يوم</button><button class="btn sm ghost" data-a="plan" data-id="' + x.id + '" data-p="trial" data-d="3">تجربة +3 أيام</button></td></tr>').join('') + '</table></div>' +
-    '<h2 style="margin-top:32px">المواقع</h2><div class="tbl"><table><tr><th>الموقع</th><th>الرابط</th><th>النوع</th><th>صاحب الموقع</th><th>الحالة</th><th>إجراءات</th></tr>' +
-    (sites.length ? sites.map(x => '<tr><td>' + esc(x.name) + '</td><td><a href="#/s/' + esc(x.slug) + '" target="_blank" dir="ltr">' + esc(x.slug) + '</a></td><td>' + TYPE_NAMES[x.site_type] + '</td><td dir="ltr">' + esc(email[x.owner_id] || '') + '</td><td>' + (x.status === 'active' ? 'شغال' : 'موقوف') + '</td><td class="act"><button class="btn sm ' + (x.status === 'active' ? 'warn' : '') + '" data-a="site" data-id="' + x.id + '" data-s="' + (x.status === 'active' ? 'suspended' : 'active') + '">' + (x.status === 'active' ? 'إيقاف' : 'تشغيل') + '</button><button class="btn sm warn" data-a="sdel" data-id="' + x.id + '">حذف</button></td></tr>').join('') : '<tr><td colspan="6">مفيش مواقع لسه.</td></tr>') + '</table></div></section>';
+    '</div><div class="tab" id="t-sites" hidden><h2>المواقع</h2><div class="tbl"><table><tr><th>الموقع</th><th>الرابط</th><th>النوع</th><th>صاحب الموقع</th><th>الحالة</th><th>إجراءات</th></tr>' +
+    (sites.length ? sites.map(x => '<tr><td>' + esc(x.name) + '</td><td><a href="#/s/' + esc(x.slug) + '" target="_blank" dir="ltr">' + esc(x.slug) + '</a></td><td>' + TYPE_NAMES[x.site_type] + '</td><td dir="ltr">' + esc(email[x.owner_id] || '') + '</td><td>' + (x.status === 'active' ? 'شغال' : 'موقوف') + '</td><td class="act"><button class="btn sm ' + (x.status === 'active' ? 'warn' : '') + '" data-a="site" data-id="' + x.id + '" data-s="' + (x.status === 'active' ? 'suspended' : 'active') + '">' + (x.status === 'active' ? 'إيقاف' : 'تشغيل') + '</button><button class="btn sm ghost" data-a="tpl" data-id="' + x.id + '">حفظ كقالب</button><button class="btn sm warn" data-a="sdel" data-id="' + x.id + '">حذف</button></td></tr>').join('') : '<tr><td colspan="6">مفيش مواقع لسه.</td></tr>') + '</table></div></div></section>';
+  const showTab = t => {
+    window._adminTab = t;
+    m.querySelectorAll('.tab').forEach(d => d.hidden = d.id !== 't-' + t);
+    m.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('ghost', b.dataset.tab !== t));
+  };
+  showTab(curTab);
+  m.querySelector('.atabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) showTab(b.dataset.tab); });
   m.querySelector('#setf').onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(e.target), msg = document.getElementById('amsg'); msg.textContent = '';
@@ -206,8 +235,15 @@ async function admin(m) {
     let wa = String(f.get('wa')).replace(/[^0-9]/g, '');
     if (wa.startsWith('0') && wa.length === 11) wa = '20' + wa.slice(1);
     if (cash.length < 8 || cash.length > 15 || wa.length < 10 || wa.length > 15) { msg.textContent = 'راجع الأرقام اللي كتبتها.'; return; }
+    const pm = +f.get('pm'), py = +f.get('py');
+    if (!(pm > 0) || !(py > 0)) { msg.textContent = 'اكتب الأسعار أرقام أكبر من صفر.'; return; }
     const now = new Date().toISOString();
     const r = await sb.from('app_settings').upsert([
+      { key: 'price_monthly', value: String(pm), updated_at: now },
+      { key: 'price_yearly', value: String(py), updated_at: now },
+      { key: 'hero_title', value: String(f.get('ht')).trim(), updated_at: now },
+      { key: 'hero_text', value: String(f.get('hx')).trim(), updated_at: now },
+      { key: 'ad_text', value: String(f.get('ad')).trim(), updated_at: now },
       { key: 'vodafone_cash', value: cash, updated_at: now },
       { key: 'whatsapp', value: wa, updated_at: now },
       { key: 'launch_date', value: new Date(f.get('launch') + 'T00:00:00').toISOString(), updated_at: now }
@@ -225,6 +261,14 @@ async function admin(m) {
       r = await sb.rpc('admin_set_plan', { target: b.dataset.u, new_plan: b.dataset.p, days: +b.dataset.d });
       if (!r.error) r = await sb.from('payment_requests').update({ status: 'approved', handled_at: new Date().toISOString() }).eq('id', b.dataset.id);
     }
+    else if (a === 'tpl') {
+      const sx = sites.find(z => z.id === b.dataset.id), nm = sx && prompt('اسم القالب:', sx.name);
+      if (!nm || !nm.trim()) return;
+      r = await sb.from('site_templates').insert({ name: nm.trim().slice(0, 80), site_type: sx.site_type, description: sx.description || '', color: sx.color, content: arr(sx.content) });
+      if (!r.error) window._adminTab = 'tpl';
+    }
+    else if (a === 'tact') r = await sb.from('site_templates').update({ active: b.dataset.v === 'true' }).eq('id', b.dataset.id);
+    else if (a === 'tdel') { if (!confirm('حذف القالب؟')) return; r = await sb.from('site_templates').delete().eq('id', b.dataset.id); }
     else if (a === 'rno') r = await sb.from('payment_requests').update({ status: 'rejected', handled_at: new Date().toISOString() }).eq('id', b.dataset.id);
     else if (a === 'site') r = await sb.rpc('admin_set_site_status', { target: b.dataset.id, new_status: b.dataset.s });
     else if (a === 'sdel') { if (!confirm('حذف الموقع نهائياً؟')) return; r = await sb.from('sites').delete().eq('id', b.dataset.id); }
@@ -367,7 +411,20 @@ function terms(m) {
 
 const routes = { '/': home, '/login': login, '/signup': signup, '/dashboard': dashboard, '/admin': admin, '/terms': terms };
 
+async function loadSettings() {
+  try {
+    const { data } = await sb.from('app_settings').select('key,value'), g = {};
+    (data || []).forEach(x => g[x.key] = x.value);
+    window.APP_SETTINGS = g;
+    const money = v => /^[0-9]+(\.[0-9]+)?$/.test(String(v || '').trim()) ? Number(v) + ' جنيه' : '';
+    if (money(g.price_monthly)) C.PRICE_MONTHLY = money(g.price_monthly);
+    if (money(g.price_yearly)) C.PRICE_YEARLY = money(g.price_yearly);
+    if (g.ad_text) C.AD_TEXT = g.ad_text;
+  } catch {}
+}
+
 async function route() {
+  await loadSettings();
   await loadMe();
   const h = (location.hash.slice(1) || '/').split('?')[0];
   const dom = await domainSlug();
