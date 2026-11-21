@@ -13,39 +13,6 @@ const oldp = p => p.old_price > p.price ? '<s class="old">' + money(p.old_price)
 const addr = f => [f.get('city'), f.get('street'), f.get('bld') && 'عمارة ' + f.get('bld'), f.get('mark')].map(x => String(x || '').trim()).filter(Boolean).join(' - ');
 const fdate = d => new Date(d).toLocaleString('ar-EG');
 
-// تواصل مباشر داخل صفحة الموقع، مع حفظ رمز المحادثة في متصفح الزائر للعودة إليها.
-function initSiteChat(site) {
-  if (document.getElementById('site-chat-widget')) return;
-  const host = document.querySelector('.site'); if (!host) return;
-  const key = 'surehgo-chat:' + site.id;
-  let token = ''; try { token = localStorage.getItem(key) || ''; } catch {}
-  const widget = document.createElement('div'); widget.id = 'site-chat-widget';
-  widget.innerHTML = '<button type="button" class="site-chat-launch" aria-label="راسلنا">💬 <span>راسلنا</span></button><section class="site-chat-panel" hidden><header><div><b>المساعدة والتواصل</b><small>' + esc(site.name) + '</small></div><button type="button" class="site-chat-close" aria-label="إغلاق">×</button></header><div class="site-chat-messages" aria-live="polite"></div><form class="site-chat-form"><div class="site-chat-contact"' + (token ? ' hidden' : '') + '><input name="name" required minlength="2" maxlength="100" placeholder="اسمك"><input name="phone" required minlength="6" maxlength="24" placeholder="رقم الهاتف" dir="ltr"></div><textarea name="body" required maxlength="2000" rows="2" placeholder="اكتب رسالتك..."></textarea><button type="submit">إرسال الرسالة</button><small class="site-chat-status">هنرد عليك من هنا. احتفظ بنفس المتصفح للرجوع للمحادثة.</small></form></section>';
-  host.appendChild(widget);
-  const panel = widget.querySelector('.site-chat-panel'), feed = widget.querySelector('.site-chat-messages'), form = widget.querySelector('form'), status = widget.querySelector('.site-chat-status');
-  const read = async () => {
-    if (!token || panel.hidden) return;
-    const { data, error } = await sb.rpc('site_chat_read', { p_token: token });
-    if (error) { status.textContent = 'تعذر تحميل المحادثة. تأكد من إعداد الرسائل في المنصة.'; return; }
-    feed.innerHTML = (data || []).map(x => '<div class="site-chat-bubble ' + (x.sender === 'visitor' ? 'mine' : 'theirs') + '">' + esc(x.body) + '<small>' + new Date(x.created_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'}) + '</small></div>').join('');
-    feed.scrollTop = feed.scrollHeight;
-  };
-  widget.querySelector('.site-chat-launch').onclick = () => { panel.hidden = false; read(); form.querySelector('[name="body"]').focus(); };
-  widget.querySelector('.site-chat-close').onclick = () => { panel.hidden = true; };
-  form.onsubmit = async e => {
-    e.preventDefault(); const f = new FormData(form), body = String(f.get('body') || '').trim(); if (!body) return;
-    const send = form.querySelector('button[type="submit"]'); send.disabled = true; status.textContent = 'جاري إرسال رسالتك...';
-    const result = token
-      ? await sb.rpc('site_chat_reply', { p_token: token, p_body: body })
-      : await sb.rpc('site_chat_start', { p_site: site.id, p_name: String(f.get('name')).trim(), p_phone: String(f.get('phone')).trim(), p_body: body });
-    if (result.error) { status.textContent = 'الرسالة ما اتبعتتش. تأكد من تشغيل ملف إعداد المحادثات في Supabase.'; send.disabled = false; return; }
-    if (!token) { token = result.data; try { localStorage.setItem(key, token); } catch {} widget.querySelector('.site-chat-contact').hidden = true; }
-    form.querySelector('[name="body"]').value = ''; status.textContent = 'وصلت رسالتك. رد الموقع هيظهر هنا.'; send.disabled = false; await read();
-  };
-  if (window._siteChatPoll) clearInterval(window._siteChatPoll);
-  window._siteChatPoll = setInterval(read, 7000);
-}
-
 // ====== صفحة الموقع العامة: المنتجات والسلة والحجز ======
 async function shopSection(site) {
   const box = document.getElementById('shop-box'); if (!box) return;
