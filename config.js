@@ -4,5 +4,6 @@ window.APP_CONFIG = {
   PLATFORM_NAME: "surehgo",
   PRICE_MONTHLY: "199 جنيه",
   PRICE_YEARLY: "1499 جنيه",
+  PLATFORM_HOSTS: [],
   AD_TEXT: "هذا موقع مجاني تم إنشاؤه على surehgo. أنشئ موقعك أنت كمان في دقائق"
 };

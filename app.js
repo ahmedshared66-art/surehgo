@@ -127,7 +127,7 @@ async function dashboard(m) {
   const { data } = await sb.from('sites').select('*').eq('owner_id', me.id).order('created_at', { ascending: false });
   const sites = data || [];
   const canCreate = s.ok && sites.length < 3;
-  m.innerHTML = '<section class="wrap"><h1>أهلاً ' + esc(me.full_name) + '</h1><div class="status ' + (s.ok ? 'on' : 'off') + '">' + esc(s.text) + '</div>' +
+  m.innerHTML = '<section class="wrap"><h1>أهلاً ' + esc(me.full_name) + '</h1><div class="status ' + (s.ok ? 'on' : 'off') + '">' + esc(s.text) + '</div>' + payHtml() +
     '<h2>مواقعي</h2>' + (sites.length ? '<ul class="mysites">' + sites.map(x => '<li><div><b>' + esc(x.name) + '</b> <small>(' + TYPE_NAMES[x.site_type] + (x.status === 'suspended' ? ' - موقوف من الإدارة' : '') + ')</small><br><a href="#/s/' + esc(x.slug) + '" target="_blank" dir="ltr">' + esc(siteUrl(x.slug)) + '</a></div><div class="act"><a class="btn sm" href="#/builder/' + x.id + '">بناء الموقع</a><a class="btn sm ghost" href="#/edit/' + x.id + '">البيانات</a><a class="btn sm ghost" href="#/manage/' + x.id + '">المتجر والطلبات</a><button class="btn sm warn" data-del="' + x.id + '">حذف</button></div></li>').join('') + '</ul>' : '<p>لسه معندكش مواقع.</p>') +
     (canCreate ? '<h2>إنشاء موقع جديد</h2><form class="card" id="nf"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80"></label><label>الرابط (حروف إنجليزية صغيرة وأرقام وشرطة)<input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,29}" maxlength="30" placeholder="my-restaurant"></label><label>نوع النشاط<select name="type">' + Object.keys(TYPE_NAMES).map(k => '<option value="' + k + '">' + TYPE_NAMES[k] + '</option>').join('') + '</select></label><label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600"></textarea></label><label>اللون المفضل<input type="color" name="color" value="#0B5C6B"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20"></label><button class="btn">إنشاء الموقع</button><div class="msg" role="alert"></div></form>'
       : '<p class="msg">' + (s.ok ? 'وصلت للحد الأقصى (3 مواقع).' : 'مينفعش تنشئ مواقع جديدة لأن التجربة أو الاشتراك انتهى.') + '</p>') + '</section>';
@@ -140,6 +140,7 @@ async function dashboard(m) {
     route();
   };
   m.onclick = async e => {
+    const pb = e.target.closest('[data-pay]'); if (pb) { startPay(pb.dataset.pay, pb); return; }
     const b = e.target.closest('[data-del]'); if (!b || !confirm('متأكد إنك عايز تحذف الموقع نهائياً؟')) return;
     const { error } = await sb.from('sites').delete().eq('id', b.dataset.del);
     if (error) alert(error.message); else route();
@@ -241,7 +242,7 @@ async function builder(m, id) {
   const blocks = arr(data.content).filter(b => b && BLOCKS[b.type]);
   m.innerHTML = '<section class="bld"><aside class="pal"><h3>العناصر</h3><p class="hint">اسحب العنصر وضعه في الصفحة، أو اضغط عليه.</p>' +
     Object.keys(BLOCKS).map(k => '<button type="button" class="pal-i" draggable="true" data-new="' + k + '">' + BLOCKS[k].n + '</button>').join('') +
-    '</aside><div class="cv"><div class="bar"><b>' + esc(data.name) + '</b><span class="grow"></span><span id="st" role="status"></span><button type="button" class="btn" id="save">حفظ</button><a class="btn ghost" href="#/s/' + esc(data.slug) + '" target="_blank">معاينة</a><a class="btn ghost" href="#/dashboard">رجوع</a></div><div id="canvas"></div></div></section>';
+    '</aside><div class="cv"><div class="bar"><b>' + esc(data.name) + '</b><span class="grow"></span><span id="st" role="status"></span><button type="button" class="btn ghost" id="ai">إنشاء بالذكاء الاصطناعي</button><button type="button" class="btn" id="save">حفظ</button><a class="btn ghost" href="#/s/' + esc(data.slug) + '" target="_blank">معاينة</a><a class="btn ghost" href="#/dashboard">رجوع</a></div><div id="canvas"></div></div></section>';
   const cv = m.querySelector('#canvas'), st = t => m.querySelector('#st').textContent = t;
 
   const inp = (i, f, label, v, ltr, extra) => '<label>' + label + '<input' + (ltr ? ' dir="ltr"' : ' class="rtl"') + ' data-i="' + i + '" data-f="' + f + '" value="' + esc(v) + '" ' + (extra || '') + '></label>';
@@ -308,6 +309,7 @@ async function builder(m, id) {
     else if (b.dataset.add !== undefined) { const x = blocks[+b.dataset.add]; if (x.items.length < 20) x.items.push(x.type === 'faq' ? {q:'', a:''} : {name:'', text:''}); }
     else if (b.dataset.rm !== undefined) blocks[i].items.splice(+b.dataset.rm, 1);
     else if (b.dataset.gdel !== undefined) blocks[i].urls.splice(+b.dataset.gdel, 1);
+    else if (b.id === 'ai') { aiGenerate(id, blocks, st, draw); return; }
     else if (b.id === 'save') {
       st('جاري الحفظ...');
       sb.from('sites').update({ content: blocks }).eq('id', id).then(r => st(r.error ? 'فشل الحفظ: ' + r.error.message : 'تم الحفظ.'));
@@ -325,7 +327,11 @@ const routes = { '/': home, '/login': login, '/signup': signup, '/dashboard': da
 
 async function route() {
   await loadMe();
-  const h = location.hash.slice(1) || '/';
+  const h = (location.hash.slice(1) || '/').split('?')[0];
+  const dom = await domainSlug();
+  if (dom && h === '/') { await siteView(dom); return; }
+  if (/[?&]success=true/.test(location.hash)) notice = 'تم استلام الدفع. اشتراكك بيتفعّل خلال لحظات، حدّث الصفحة لو الحالة ما اتغيرتش.';
+  else if (/[?&]success=false/.test(location.hash)) notice = 'عملية الدفع ما اكتملتش. ما اتخصمش منك أي مبلغ، تقدر تجرّب تاني.';
   if (h.startsWith('/s/')) { await siteView(decodeURIComponent(h.slice(3)).toLowerCase()); return; }
   document.title = C.PLATFORM_NAME;
   root.innerHTML = nav() + (notice ? '<div class="banner" role="alert">' + esc(notice) + '</div>' : '') + '<main></main><footer><span>© ' + new Date().getFullYear() + ' ' + esc(C.PLATFORM_NAME) + '</span><a href="#/terms">شروط الاستخدام</a></footer>';

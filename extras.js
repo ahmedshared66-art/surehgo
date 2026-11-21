@@ -43,3 +43,56 @@ async function siteExtras(site) {
     }
   } catch {}
 }
+
+// ====== الذكاء الاصطناعي في المحرر (بيستدعي Edge Function اسمها generate-site) ======
+async function aiGenerate(siteId, blocks, st, draw) {
+  const prompt = window.prompt('اكتب وصف نشاطك وأهم خدماتك أو منتجاتك (اختياري)، وهنجهّز لك أقسام الموقع. المحتوى بيتضاف لآخر الصفحة وتقدر تعدّله قبل الحفظ:', '');
+  if (prompt === null) return;
+  st('جاري إنشاء المحتوى بالذكاء الاصطناعي...');
+  const { data, error } = await sb.functions.invoke('generate-site', { body: { site_id: siteId, prompt: prompt.slice(0, 1000) } });
+  if (error) {
+    let code = '';
+    try { code = (await error.context.json()).error; } catch {}
+    st(({
+      plan_required: 'الذكاء الاصطناعي متاح في الباقة السنوية.',
+      rate_limited: 'وصلت للحد اليومي (10 مرات). جرّب بكرة.',
+      ai_not_configured: 'الذكاء الاصطناعي لسه مش مفعّل من إدارة المنصة.',
+      ai_failed: 'خدمة الذكاء الاصطناعي مش متاحة دلوقتي. جرّب بعد شوية.',
+      ai_bad_output: 'النتيجة مش صالحة. جرّب تاني بوصف أوضح.'
+    })[code] || 'تعذر إنشاء المحتوى. جرّب تاني.');
+    return;
+  }
+  const room = 40 - blocks.length, add = arr(data && data.blocks).filter(b => b && BLOCKS[b.type]).slice(0, Math.max(room, 0));
+  if (!add.length) { st(room <= 0 ? 'وصلت للحد الأقصى (40 عنصر).' : 'مفيش محتوى جديد. جرّب تاني.'); return; }
+  blocks.push(...add); draw();
+  st('تمت إضافة ' + add.length + ' عنصر. راجعهم واضغط حفظ.');
+}
+
+// ====== الاشتراك والدفع (Paymob عن طريق Edge Function اسمها create-payment) ======
+const payHtml = () =>
+  '<h2>الاشتراك</h2><div class="pay"><button type="button" class="btn" data-pay="monthly">اشترك شهري: ' + esc(C.PRICE_MONTHLY) +
+  '</button> <button type="button" class="btn" data-pay="yearly">اشترك سنوي: ' + esc(C.PRICE_YEARLY) +
+  '</button></div><p class="hint">الدفع بالبطاقة عبر Paymob، واشتراكك بيتفعّل تلقائياً بعد نجاح الدفع.</p>';
+
+async function startPay(plan, btn) {
+  btn.disabled = true;
+  const { data, error } = await sb.functions.invoke('create-payment', { body: { plan, return_url: location.origin + location.pathname + '#/dashboard' } });
+  if (error || !data || typeof data.url !== 'string' || !data.url.startsWith('https://eg.checkout.paymob.com/')) {
+    btn.disabled = false;
+    let code = '';
+    try { code = (await error.context.json()).error; } catch {}
+    alert(code === 'phone_required' ? 'رقم هاتفك مش مسجّل في حسابك.' : code === 'not_configured' ? 'الدفع لسه مش مفعّل من إدارة المنصة.' : 'تعذر بدء الدفع. جرّب تاني.');
+    return;
+  }
+  location.href = data.url;
+}
+
+// ====== الدومين الخاص: لو الزائر داخل من دومين مربوط بموقع، نعرض الموقع على طول ======
+let _dom;
+async function domainSlug() {
+  if (_dom !== undefined) return _dom;
+  const h = location.hostname;
+  if (!h || h === 'localhost' || h.endsWith('.github.io') || arr(C.PLATFORM_HOSTS).includes(h)) return (_dom = null);
+  try { const { data } = await sb.rpc('slug_by_domain', { p_host: h }); _dom = typeof data === 'string' ? data : null; } catch { _dom = null; }
+  return _dom;
+}
