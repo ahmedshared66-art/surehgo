@@ -48,10 +48,31 @@ function nav() {
   const currentPlan = me && (window.APP_PLANS || []).find(p => p.id === me.subscription_plan_id);
   const remaining = me ? status(me) : null;
   const links = me
-    ? '<a href="#/dashboard">لوحتي</a>' + (me.role === 'super_admin' ? '<a href="#/admin">لوحة الأدمن' + (window._pc ? ' <span class="cnt">' + window._pc + '</span>' : '') + '</a><a href="#/theme">المظهر</a>' : '') + '<button id="logout" class="btn ghost">تسجيل الخروج</button>'
+    ? '<a href="#/dashboard">لوحتي</a><a class="notify-link" href="#/notifications" aria-label="الإشعارات">الإشعارات' + (window._unreadN ? ' <span class="cnt">' + window._unreadN + '</span>' : '') + '</a>' + (me.role === 'super_admin' ? '<a href="#/admin">لوحة الأدمن' + (window._pc ? ' <span class="cnt">' + window._pc + '</span>' : '') + '</a><a href="#/theme">المظهر</a>' : '') + '<button id="logout" class="btn ghost">تسجيل الخروج</button>'
     : '<a href="#/login">تسجيل الدخول</a><a class="btn" href="#/signup">إنشاء حساب</a>';
   const sub = me ? '<a class="subnav" href="#/subscriptions">الاشتراك <small>' + esc(currentPlan ? currentPlan.name : (me.plan === 'trial' ? 'تجربة مجانية' : planName(me.plan))) + ' · ' + esc(remaining.text) + '</small></a>' : '';
   return '<header class="nav"><div class="nav-main"><a class="brand" href="#/">' + esc(C.PLATFORM_NAME) + '</a>' + sub + '</div><nav>' + links + '</nav></header>';
+}
+
+async function notificationsPage(m) {
+  if (!me) { location.hash = '#/login'; return; }
+  const { data, error } = await sb.from('notifications').select('id,title,body,kind,created_at,read_at').eq('user_id', me.id).order('created_at', { ascending: false }).limit(100);
+  if (error) { m.innerHTML = '<section class="wrap"><h1>إشعاراتك</h1><p class="msg">فعّل جدول الإشعارات في Supabase من ملف الإعداد المرفق، ثم حدّث الصفحة.</p></section>'; return; }
+  const rows = data || [];
+  m.innerHTML = '<section class="wrap notification-page"><div class="notification-title"><div><h1>الإشعارات</h1><p class="hint">طلبات واشتراكات وتحديثات حسابك في مكان واحد.</p></div><button type="button" class="btn sm ghost" id="notifications-read-all">تحديد الكل كمقروء</button></div>' + (rows.length ? '<div class="notification-list">' + rows.map(n => '<article class="notification-card' + (n.read_at ? '' : ' unread') + '"><span class="notification-icon">' + (n.kind === 'order' ? '🛍️' : n.kind === 'subscription' ? '✨' : '🔔') + '</span><div><b>' + esc(n.title) + '</b><p>' + esc(n.body) + '</p><small>' + new Date(n.created_at).toLocaleString('ar-EG') + (n.read_at ? '' : ' · جديد') + '</small></div></article>').join('') + '</div>' : '<div class="notification-empty"><b>مفيش إشعارات لسه</b><p>هنعرض هنا أي تحديث يخص حسابك أو طلبات المواقع.</p></div>') + '</section>';
+  m.querySelector('#notifications-read-all')?.addEventListener('click', async () => {
+    const unread = rows.filter(n => !n.read_at).map(n => n.id);
+    if (!unread.length) return;
+    const { error: updateError } = await sb.from('notifications').update({ read_at: new Date().toISOString() }).in('id', unread);
+    if (updateError) { alert('تعذر تحديث الإشعارات: ' + updateError.message); return; }
+    window._unreadN = 0; route();
+  });
+  m.querySelectorAll('.notification-card.unread').forEach(card => card.addEventListener('click', async () => {
+    const idx = [...m.querySelectorAll('.notification-card')].indexOf(card), n = rows[idx];
+    if (!n || n.read_at) return;
+    await sb.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', n.id);
+    window._unreadN = Math.max(0, (window._unreadN || 0) - 1); card.classList.remove('unread');
+  }));
 }
 
 const TYPES = ['مطعم','متجر','شركة','عيادة','مدرسة','موقع شخصي','فندق'];
@@ -338,7 +359,7 @@ async function admin(m) {
     tabsNav + '<div class="tab" id="t-set" hidden>' + setHtml + '</div><div class="tab" id="t-plans" hidden>' + planHtml + '</div><div class="tab" id="t-assets" hidden>' + assetHtml + '</div><div class="tab" id="t-tpl" hidden>' + tplHtml + '</div><div class="tab" id="t-req" hidden>' + reqHtml + customReqHtml + '</div>' +
     '<div class="tab" id="t-users" hidden><h2>المستخدمين</h2><div class="tbl"><table><tr><th>الاسم</th><th>البريد</th><th>الهاتف</th><th>الباقة</th><th>الحالة</th><th>تاريخ التسجيل</th><th>إجراءات</th></tr>' +
     users.map(x => '<tr><td>' + esc(x.full_name) + '</td><td dir="ltr">' + esc(x.email) + '</td><td dir="ltr">' + esc(x.phone) + '</td><td>' + esc((plans.find(p => p.id === x.subscription_plan_id) || {}).name || planName(x.plan)) + (x.role === 'super_admin' ? ' (أدمن)' : '') + '</td><td>' + esc(status(x).text) + (x.is_disabled ? ' - معطّل' : '') + '</td><td>' + new Date(x.created_at).toLocaleDateString('ar-EG') + '</td><td class="act">' +
-    (x.id === me.id ? '' : '<button class="btn sm ' + (x.is_disabled ? '' : 'warn') + '" data-a="dis" data-id="' + x.id + '" data-v="' + !x.is_disabled + '">' + (x.is_disabled ? 'تفعيل الحساب' : 'تعطيل') + '</button><button class="btn sm warn" data-a="udel" data-id="' + x.id + '" data-email="' + esc(x.email) + '">حذف الحساب</button>') +
+    (x.id === me.id ? '' : '<button class="btn sm ghost" data-a="notify" data-id="' + x.id + '" data-email="' + esc(x.email) + '">إرسال إشعار</button><button class="btn sm ' + (x.is_disabled ? '' : 'warn') + '" data-a="dis" data-id="' + x.id + '" data-v="' + !x.is_disabled + '">' + (x.is_disabled ? 'تفعيل الحساب' : 'تعطيل') + '</button><button class="btn sm warn" data-a="udel" data-id="' + x.id + '" data-email="' + esc(x.email) + '">حذف الحساب</button>') +
     '<button class="btn sm" data-a="assign" data-id="' + x.id + '">إسناد باقة</button>' + (x.subscription_plan_id ? '<button class="btn sm ghost" data-a="renew" data-id="' + x.id + '" data-pid="' + esc(x.subscription_plan_id) + '">تجديد وإضافة أيام</button>' : '') + '<button class="btn sm ghost" data-a="bonus" data-id="' + x.id + '" data-bonus="' + Number(x.site_limit_bonus || 0) + '">زيادة حد المواقع (' + Number(x.site_limit_bonus || 0) + ')</button>' + (x.plan !== 'trial' && x.plan_ends_at && daysLeft(x.plan_ends_at) > 0 ? '<button class="btn sm warn" data-a="cancel" data-id="' + x.id + '">إلغاء الاشتراك</button>' : '') + '<button class="btn sm ghost" data-a="plan" data-id="' + x.id + '" data-p="trial" data-d="' + esc(cfg.trial_days || '3') + '">تجربة +' + esc(cfg.trial_days || '3') + ' أيام</button></td></tr>').join('') + '</table></div>' +
     '</div><div class="tab" id="t-sites" hidden><h2>المواقع</h2><div class="tbl"><table><tr><th>الموقع</th><th>الرابط</th><th>النوع</th><th>صاحب الموقع</th><th>الحالة</th><th>إجراءات</th></tr>' +
     (sites.length ? sites.map(x => '<tr><td>' + esc(x.name) + '</td><td><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(x.slug) + '</a></td><td>' + TYPE_NAMES[x.site_type] + '</td><td dir="ltr">' + esc(email[x.owner_id] || '') + '</td><td>' + (x.status === 'active' ? 'شغال' : 'موقوف') + '</td><td class="act"><a class="btn sm" href="#/builder/' + esc(x.id) + '">تعديل بالماوس</a><button class="btn sm ' + (x.status === 'active' ? 'warn' : '') + '" data-a="site" data-id="' + x.id + '" data-s="' + (x.status === 'active' ? 'suspended' : 'active') + '">' + (x.status === 'active' ? 'إيقاف' : 'تشغيل') + '</button><button class="btn sm ghost" data-a="move" data-id="' + esc(x.id) + '">نقل الملكية</button><button class="btn sm ghost" data-a="tpl" data-id="' + x.id + '">حفظ كقالب</button><button class="btn sm warn" data-a="sdel" data-id="' + x.id + '">حذف الموقع</button></td></tr>').join('') : '<tr><td colspan="6">مفيش مواقع لسه.</td></tr>') + '</table></div></div></section>';
@@ -414,7 +435,12 @@ async function admin(m) {
     const b = e.target.closest('button'); if (!b) return;
     const msg = document.getElementById('amsg'); msg.textContent = '';
     const a = b.dataset.a; let r;
-    if (a === 'dis') r = await sb.rpc('admin_set_disabled', { target: b.dataset.id, disabled: b.dataset.v === 'true' });
+    if (a === 'notify') {
+      const title = prompt('عنوان الإشعار للعميل ' + b.dataset.email + ':'); if (title === null || !title.trim()) return;
+      const body = prompt('اكتب تفاصيل الإشعار، مثل مبلغ الدفع أو المطلوب من العميل:'); if (body === null || !body.trim()) return;
+      r = await sb.rpc('admin_send_notification', { p_user: b.dataset.id, p_title: title.trim().slice(0, 120), p_body: body.trim().slice(0, 1000) });
+    }
+    else if (a === 'dis') r = await sb.rpc('admin_set_disabled', { target: b.dataset.id, disabled: b.dataset.v === 'true' });
     else if (a === 'bonus') {
       const raw = prompt('عدد المواقع الإضافية لهذا الحساب. اكتب -1 لجعله غير محدود:', b.dataset.bonus || '0'); if (raw === null) return;
       const n = Number(raw); if (!Number.isInteger(n) || n < -1) { msg.textContent = 'اكتب صفرًا أو رقمًا موجبًا، أو -1 لغير محدود.'; return; }
@@ -538,6 +564,20 @@ function renderBlock(b) {
 }
 
 const MIME = {'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp', 'video/mp4':'mp4', 'application/pdf':'pdf'};
+const EDITOR_THEMES = [
+  {id:'ocean',name:'محيط هادي',color:'#0B5C6B',bg:'#F5FAFA',ink:'#10202B',hero:'grad',skin:''},
+  {id:'violet',name:'ليلكي عصري',color:'#7047C8',bg:'#FAF8FF',ink:'#21183A',hero:'glass',skin:''},
+  {id:'terra',name:'تيراكوتا دافئ',color:'#C76542',bg:'#FFF8F2',ink:'#352219',hero:'grad',skin:''},
+  {id:'forest',name:'أخضر طبيعي',color:'#28634D',bg:'#F5FAF5',ink:'#17291F',hero:'solid',skin:''},
+  {id:'mono',name:'أسود وأبيض',color:'#202020',bg:'#FFFFFF',ink:'#171717',hero:'solid',skin:''},
+  {id:'clan',name:'متجر كلان',color:'#0B5C6B',bg:'#FFFDF8',ink:'#202A32',hero:'solid',skin:'clan'},
+  {id:'exemore',name:'متجر إكسيمور',color:'#1D3557',bg:'#F7F9FC',ink:'#152033',hero:'solid',skin:'exemore'},
+  {id:'defacto',name:'متجر ديفاكتو',color:'#252525',bg:'#FFFFFF',ink:'#171717',hero:'solid',skin:'defacto'}
+];
+function editorThemeCards(type) {
+  const items = type === 'store' ? EDITOR_THEMES.filter(x => ['clan','exemore','defacto','ocean','mono'].includes(x.id)) : EDITOR_THEMES.filter(x => !x.skin);
+  return items.map(x => '<button type="button" class="theme-choice" data-theme-preset="' + x.id + '" style="--swatch:' + x.color + ';--swatch-bg:' + x.bg + '"><i></i><b>' + x.name + '</b></button>').join('');
+}
 async function uploadFile(file, kinds) {
   if (!MIME[file.type] || !kinds.includes(file.type.split('/')[0])) throw new Error('نوع الملف غير مدعوم هنا.');
   if (file.size > 20 * 1024 * 1024) throw new Error('الملف أكبر من 20 ميجا.');
@@ -555,10 +595,20 @@ async function builder(m, id) {
   const library = libraryData || [];
   const blocks = arr(data.content).filter(b => b && BLOCKS[b.type]);
   if (!blocks.length) blocks.push(...starterContent(data.site_type, data.name, data.description, data.phone));
-  m.innerHTML = '<section class="bld live-bld"><aside class="pal"><h3>العناصر</h3><p class="hint">أضف الأقسام أو اسحبها ورتبها. المعاينة بتتحدث قدامك.</p>' +
+  m.innerHTML = '<section class="bld live-bld"><aside class="pal"><h3>المظهر والقالب</h3><p class="hint">اختار سِمة، وبعدها غيّر اللون أو البانر وشوف النتيجة فورًا.</p><div class="theme-choices">' + editorThemeCards(data.site_type) + '</div><div class="theme-controls"><label>اللون الأساسي<input id="theme-color" type="color" value="' + esc(data.color || '#0B5C6B') + '"></label><label>خلفية الموقع<input id="theme-bg" type="color" value="' + esc((data.theme && data.theme.bg) || '#FFFFFF') + '"></label><label>لون النص<input id="theme-ink" type="color" value="' + esc((data.theme && data.theme.ink) || '#10202B') + '"></label><label>شكل الواجهة<select id="theme-hero"><option value="solid">ثابت</option><option value="grad">تدرّج</option><option value="glass">زجاجي</option></select></label><label>الخط<select id="theme-font"><option value="">الافتراضي</option>' + fontList(window.APP_SETTINGS).map(f => '<option value="' + esc(f) + '"' + ((data.theme && data.theme.font === f) ? ' selected' : '') + '>' + esc(f) + '</option>').join('') + '</select></label><label>استدارة الحواف<input id="theme-radius" type="range" min="0" max="32" value="' + Number((data.theme && data.theme.radius) ?? 10) + '"></label><label>صورة البانر<input id="theme-banner" type="file" accept="image/jpeg,image/png,image/webp"></label><label>شعار الموقع<input id="theme-logo" type="file" accept="image/jpeg,image/png,image/webp"></label><button type="button" class="btn sm ghost" id="theme-remove-banner"' + ((data.theme && data.theme.banner) ? '' : ' hidden') + '>إزالة البانر</button></div><hr><h3>أقسام الموقع</h3><p class="hint">أضف الأقسام أو اسحبها ورتبها. المعاينة بتتحدث قدامك.</p>' +
     Object.keys(BLOCKS).map(k => '<button type="button" class="pal-i" draggable="true" data-new="' + k + '">' + BLOCKS[k].n + '</button>').join('') +
     '</aside><div class="cv"><div class="bar"><b>' + esc(data.name) + '</b><span class="grow"></span><span id="st" role="status"></span><button type="button" class="btn ghost" id="ai">إنشاء بالذكاء الاصطناعي</button><button type="button" class="btn" id="save">حفظ</button><a class="btn ghost" href="' + esc(siteUrl(data.slug)) + '" target="_blank">فتح الموقع</a><a class="btn ghost" href="#/dashboard">رجوع</a></div><div class="builder-grid"><div id="canvas" class="editor-panel"></div><div class="preview-wrap"><div class="preview-head"><b>معاينة مباشرة</b><span class="grow"></span><button type="button" class="btn sm ghost" data-preview="desktop">كمبيوتر</button><button type="button" class="btn sm ghost" data-preview="mobile">موبايل</button></div><div id="preview-window" class="preview-window"><div id="live-preview"></div></div></div></div></div></section>';
   const cv = m.querySelector('#canvas'), preview = m.querySelector('#live-preview'), previewWindow = m.querySelector('#preview-window'), st = t => m.querySelector('#st').textContent = t;
+  const refreshAppearance = () => {
+    m.querySelector('#theme-color').value = data.color || '#0B5C6B';
+    m.querySelector('#theme-bg').value = (data.theme && data.theme.bg) || '#FFFFFF';
+    m.querySelector('#theme-ink').value = (data.theme && data.theme.ink) || '#10202B';
+    m.querySelector('#theme-hero').value = (data.theme && data.theme.hero) || 'solid';
+    m.querySelector('#theme-font').value = (data.theme && data.theme.font) || '';
+    m.querySelector('#theme-radius').value = Number((data.theme && data.theme.radius) ?? 10);
+    m.querySelector('#theme-remove-banner').hidden = !(data.theme && data.theme.banner);
+  };
+  const updateAppearance = () => { data.theme = data.theme && typeof data.theme === 'object' ? data.theme : {}; data.color = safeCol(data.color); refreshAppearance(); drawPreview(); };
   const drawPreview = () => {
     const ST = siteTheme(data.theme), intro = STARTER_COPY[data.site_type] || STARTER_COPY.company;
     const phone = String(data.phone || '').replace(/[^0-9+]/g, '');
@@ -596,7 +646,28 @@ async function builder(m, id) {
       '<div class="drop-end">' + (blocks.length ? 'اسحب هنا للإضافة في آخر الصفحة' : 'ابدأ بسحب عنصر من القائمة وضعه هنا') + '</div>';
     drawPreview();
   }
-  draw();
+  draw(); refreshAppearance();
+  m.addEventListener('input', e => {
+    const t = e.target; data.theme = data.theme && typeof data.theme === 'object' ? data.theme : {};
+    if (t.id === 'theme-color') data.color = t.value;
+    else if (t.id === 'theme-bg') data.theme.bg = t.value;
+    else if (t.id === 'theme-ink') data.theme.ink = t.value;
+    else if (t.id === 'theme-radius') data.theme.radius = +t.value;
+    else return;
+    drawPreview();
+  });
+  m.addEventListener('change', async e => {
+    const t = e.target; data.theme = data.theme && typeof data.theme === 'object' ? data.theme : {};
+    if (t.id === 'theme-hero') data.theme.hero = t.value;
+    else if (t.id === 'theme-font') data.theme.font = t.value;
+    else if (t.id === 'theme-banner' || t.id === 'theme-logo') {
+      const file = t.files && t.files[0]; if (!file) return;
+      st('جاري رفع الصورة...');
+      try { data.theme[t.id === 'theme-banner' ? 'banner' : 'logo'] = await uploadFile(file, ['image']); st('الصورة جاهزة. اضغط حفظ.'); }
+      catch (er) { st(er.message); return; }
+    } else return;
+    refreshAppearance(); drawPreview();
+  });
   const add = k => { if (blocks.length >= 40) { st('وصلت للحد الأقصى (40 عنصر).'); return; } blocks.push(BLOCKS[k].d()); draw(); };
 
   m.addEventListener('dragstart', e => {
@@ -653,6 +724,9 @@ async function builder(m, id) {
   m.addEventListener('click', e => {
     const pv = e.target.closest('[data-preview]');
     if (pv) { previewWindow.classList.toggle('mobile-preview', pv.dataset.preview === 'mobile'); return; }
+    const preset = e.target.closest('[data-theme-preset]');
+    if (preset) { const theme = EDITOR_THEMES.find(x => x.id === preset.dataset.themePreset); if (!theme) return; data.theme = { ...(data.theme || {}), bg:theme.bg, ink:theme.ink, hero:theme.hero, skin:theme.skin, radius:12, anim:true }; data.color = theme.color; m.querySelectorAll('.theme-choice').forEach(x => x.classList.toggle('selected', x === preset)); refreshAppearance(); drawPreview(); st('السِمة اتطبقت في المعاينة. اضغط حفظ لما تخلص.'); return; }
+    if (e.target.closest('#theme-remove-banner')) { data.theme = { ...(data.theme || {}), banner:'' }; refreshAppearance(); drawPreview(); st('تمت إزالة صورة البانر من المعاينة. اضغط حفظ.'); return; }
     const blockPreview = e.target.closest('[data-preview-index]');
     if (blockPreview) { const editorBlock = cv.querySelector('.blk[data-i="' + blockPreview.dataset.previewIndex + '"]'); if (editorBlock) { editorBlock.scrollIntoView({behavior:'smooth',block:'center'}); editorBlock.classList.add('editing'); setTimeout(() => editorBlock.classList.remove('editing'), 1200); } return; }
     const n = e.target.closest('[data-new]'); if (n) { add(n.dataset.new); return; }
@@ -667,7 +741,7 @@ async function builder(m, id) {
     else if (b.id === 'ai') { aiGenerate(id, blocks, st, draw); return; }
     else if (b.id === 'save') {
       st('جاري الحفظ...');
-      sb.from('sites').update({ content: blocks }).eq('id', id).then(r => st(r.error ? 'فشل الحفظ: ' + r.error.message : 'تم الحفظ.'));
+      sb.from('sites').update({ content: blocks, theme: data.theme, color: data.color }).eq('id', id).then(r => st(r.error ? 'فشل الحفظ: ' + r.error.message : 'تم حفظ الأقسام والمظهر.'));
       return;
     } else return;
     draw();
@@ -695,7 +769,7 @@ function subscriptionsPage(m) {
   };
 }
 
-const routes = { '/': home, '/login': login, '/signup': signup, '/dashboard': dashboard, '/subscriptions': subscriptionsPage, '/admin': admin, '/terms': terms, '/theme': themePage };
+const routes = { '/': home, '/login': login, '/signup': signup, '/dashboard': dashboard, '/subscriptions': subscriptionsPage, '/notifications': notificationsPage, '/admin': admin, '/terms': terms, '/theme': themePage };
 
 async function loadSettings() {
   try {
@@ -722,6 +796,8 @@ async function route() {
   if (dom && h === '/') { await siteView(dom); return; }
   await loadSettings();
   await loadMe();
+  window._unreadN = 0;
+  if (me) { try { window._unreadN = (await sb.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', me.id).is('read_at', null)).count || 0; } catch {} }
   if (/[?&]success=true/.test(location.hash)) notice = 'تم استلام الدفع. اشتراكك بيتفعّل خلال لحظات، حدّث الصفحة لو الحالة ما اتغيرتش.';
   else if (/[?&]success=false/.test(location.hash)) notice = 'عملية الدفع ما اكتملتش. ما اتخصمش منك أي مبلغ، تقدر تجرّب تاني.';
   document.title = C.PLATFORM_NAME;
