@@ -125,8 +125,8 @@ const siteUrl = slug => location.origin + BASE + 's/' + slug;
 const pathSlug = () => { try { const p = decodeURIComponent(location.pathname); return p.startsWith(BASE + 's/') ? p.slice(BASE.length + 2).split('/')[0].toLowerCase() : ''; } catch { return ''; } };
 const safeCol = c => /^#[0-9a-f]{6}$/i.test(c || '') ? c : '#0B5C6B';
 const lum = c => { const n = parseInt(c.slice(1), 16); return ((n >> 16) * 299 + (n >> 8 & 255) * 587 + (n & 255) * 114) / 1000; };
-const siteErr = e => e.code === '23505' ? 'الرابط ده مستخدم. اختار اسم تاني.'
-  : e.code === '42501' ? 'قاعدة البيانات رفضت إنشاء الموقع بسبب صلاحيات قديمة. شغّل ملف إصلاح حد المواقع من Supabase ثم حدّث الصفحة.'
+const siteErr = (e, action = 'create') => e.code === '23505' ? 'الرابط ده مستخدم. اختار اسم تاني.'
+  : e.code === '42501' ? (action === 'update' ? 'قاعدة البيانات رفضت حفظ التعديل بسبب صلاحيات الموقع. شغّل ملف إصلاح صلاحيات المواقع من Supabase ثم حدّث الصفحة.' : 'قاعدة البيانات رفضت إنشاء الموقع بسبب صلاحيات قديمة. شغّل ملف إصلاح صلاحيات المواقع من Supabase ثم حدّث الصفحة.')
   : /site_limit_reached/.test(e.message || '') ? 'وصلت للحد الأقصى لعدد المواقع في باقتك.'
   : /subscription_expired/.test(e.message || '') ? 'انتهى اشتراكك. جدّده لإنشاء موقع جديد.'
   : e.code === '23514' ? 'تأكد من البيانات: الرابط بحروف إنجليزية صغيرة وأرقام وشرطة فقط (من 3 إلى 30 حرف).'
@@ -199,7 +199,7 @@ async function editSite(m, id) {
     e.preventDefault();
     const f = new FormData(e.target), msg = m.querySelector('.msg');
     const { error } = await sb.from('sites').update({ name: f.get('name').trim(), description: f.get('description').trim(), color: f.get('color'), phone: f.get('phone').trim(), whatsapp: f.get('whatsapp').trim(), facebook: f.get('facebook').trim(), instagram: f.get('instagram').trim(), theme: await siteThemeFrom(f, data.theme) }).eq('id', id);
-    if (error) { msg.textContent = error.code === '23514' ? 'تأكد: واتساب أرقام فقط بالكود الدولي، وروابط فيسبوك وإنستجرام تبدأ بـ https://' : siteErr(error); return; }
+    if (error) { msg.textContent = error.code === '23514' ? 'تأكد: واتساب أرقام فقط بالكود الدولي، وروابط فيسبوك وإنستجرام تبدأ بـ https://' : siteErr(error, 'update'); return; }
     location.hash = '#/dashboard';
   };
 }
