@@ -77,10 +77,12 @@ const payHtml = () =>
   '</button> <button type="button" class="btn" data-pay="yearly">اشترك سنوي: ' + esc(C.PRICE_YEARLY) +
   '</button></div><div id="pay-info"></div>';
 
-function startPay(plan, btn) {
+async function startPay(plan, btn) {
   const box = document.getElementById('pay-info'); if (!box) return;
-  const cash = String(C.VODAFONE_CASH || '').trim();
-  const wa = String(C.WHATSAPP || '').replace(/[^0-9]/g, '');
+  const cfg = {};
+  try { const { data } = await sb.from('app_settings').select('key,value').in('key', ['vodafone_cash', 'whatsapp']); (data || []).forEach(x => cfg[x.key] = x.value); } catch {}
+  const cash = String(cfg.vodafone_cash || C.VODAFONE_CASH || '').trim();
+  const wa = String(cfg.whatsapp || C.WHATSAPP || '').replace(/[^0-9]/g, '');
   if (!cash || !wa) { box.innerHTML = '<p class="msg">طريقة الدفع لسه مش مجهزة من الإدارة.</p>'; return; }
   const text = 'السلام عليكم، حولت اشتراك ' + planLabel(plan) + ' (' + planPrice(plan) + ') على فودافون كاش.\n' +
     'الاسم: ' + (me.full_name || '') + '\nالبريد: ' + (me.email || '') + '\nالهاتف: ' + (me.phone || '');

@@ -163,15 +163,27 @@ async function editSite(m, id) {
 
 async function admin(m) {
   if (!me || me.role !== 'super_admin') { location.hash = '#/'; return; }
-  const [u, st, pr] = await Promise.all([
+  const [u, st, pr, ss] = await Promise.all([
     sb.from('profiles').select('*').order('created_at', { ascending: false }),
     sb.from('sites').select('*').order('created_at', { ascending: false }),
-    sb.from('payment_requests').select('*').eq('status', 'pending').order('created_at', { ascending: true })
+    sb.from('payment_requests').select('*').order('created_at', { ascending: true }),
+    sb.from('app_settings').select('*')
   ]);
   if (u.error || st.error) { m.innerHTML = '<section class="wrap"><div class="msg">' + esc((u.error || st.error).message) + '</div></section>'; return; }
   const users = u.data, sites = st.data, email = {};
   users.forEach(x => email[x.id] = x.email);
-  const reqs = pr && !pr.error ? pr.data : [], byId = {};
+  const allReq = pr && !pr.error ? pr.data : [], reqs = allReq.filter(x => x.status === 'pending'), byId = {};
+  const revenue = allReq.filter(x => x.status === 'approved').reduce((t, x) => t + Number(x.amount), 0);
+  const cfg = {}; ((ss && !ss.error && ss.data) || []).forEach(x => cfg[x.key] = x.value);
+  const firstUser = users.length ? new Date(Math.min(...users.map(x => +new Date(x.created_at)))) : new Date();
+  const launch = cfg.launch_date && !isNaN(new Date(cfg.launch_date)) ? new Date(cfg.launch_date) : firstUser;
+  const runDays = Math.max(0, Math.floor((Date.now() - launch) / 864e5));
+  const runTxt = runDays === 0 ? 'من النهاردة' : arDays(runDays);
+  const setHtml = '<h2>الإعدادات</h2>' + (ss && ss.error ? '<p class="msg">تأكد إنك شغّلت SQL الإعدادات.</p>' : '') +
+    '<form class="card" id="setf"><label>رقم فودافون كاش (اللي العميل بيحوّل عليه)<input name="cash" type="tel" required maxlength="20" value="' + esc(cfg.vodafone_cash || C.VODAFONE_CASH || '') + '"></label>' +
+    '<label>رقم واتساب (بالشكل 01xxxxxxxxx)<input name="wa" type="tel" required maxlength="20" value="' + esc(cfg.whatsapp || C.WHATSAPP || '') + '"></label>' +
+    '<label>تاريخ بداية تشغيل الموقع<input name="launch" type="date" required value="' + launch.toISOString().slice(0, 10) + '"></label>' +
+    '<button class="btn">حفظ الإعدادات</button></form>';
   users.forEach(x => byId[x.id] = x);
   const reqHtml = '<h2>طلبات الاشتراك (' + reqs.length + ')</h2>' + (pr && pr.error ? '<p class="msg">تأكد إنك شغّلت SQL طلبات الاشتراك.</p>' : reqs.length ?
     '<div class="tbl"><table><tr><th>التاريخ</th><th>العميل</th><th>الهاتف</th><th>الباقة</th><th>المبلغ</th><th>حوّل من رقم</th><th>ملاحظة</th><th>إجراءات</th></tr>' +
@@ -179,14 +191,30 @@ async function admin(m) {
       return '<tr><td>' + new Date(x.created_at).toLocaleString('ar-EG') + '</td><td>' + esc(w.full_name) + '<br><small dir="ltr">' + esc(w.email) + '</small></td><td dir="ltr">' + esc(w.phone) + '</td><td>' + (y ? 'سنوي' : 'شهري') + '</td><td>' + esc(x.amount) + ' جنيه</td><td dir="ltr">' + esc(x.sender_phone) + '</td><td style="white-space:normal">' + esc(x.note) + '</td><td class="act"><button class="btn sm" data-a="rok" data-id="' + esc(x.id) + '" data-u="' + esc(x.user_id) + '" data-p="' + (y ? 'yearly' : 'monthly') + '" data-d="' + (y ? 365 : 30) + '">تفعيل</button><button class="btn sm warn" data-a="rno" data-id="' + esc(x.id) + '">رفض</button></td></tr>'; }).join('') + '</table></div>'
     : '<p>مفيش طلبات جديدة.</p>');
   const paid = users.filter(x => x.plan !== 'trial' && x.plan_ends_at && daysLeft(x.plan_ends_at) > 0).length;
-  m.innerHTML = '<section class="wrap" style="max-width:1200px"><h1>لوحة الأدمن</h1><div class="stats"><div>المستخدمين: <b>' + users.length + '</b></div><div>مشتركين حالياً: <b>' + paid + '</b></div><div>معطّلين: <b>' + users.filter(x => x.is_disabled).length + '</b></div><div>المواقع: <b>' + sites.length + '</b></div></div><div class="msg" id="amsg" role="alert"></div>' +
-    reqHtml +
+  m.innerHTML = '<section class="wrap" style="max-width:1200px"><h1>لوحة الأدمن</h1><div class="stats"><div>المستخدمين: <b>' + users.length + '</b></div><div>مشتركين حالياً: <b>' + paid + '</b></div><div>معطّلين: <b>' + users.filter(x => x.is_disabled).length + '</b></div><div>المواقع: <b>' + sites.length + '</b></div><div>طلبات اشتراك معلّقة: <b>' + reqs.length + '</b></div><div>إيرادات مؤكدة: <b>' + revenue.toLocaleString('ar-EG') + ' جنيه</b></div><div>المنصة شغالة بقالها: <b>' + runTxt + '</b></div></div><div class="msg" id="amsg" role="alert"></div>' +
+    setHtml + reqHtml +
     '<h2 style="margin-top:32px">المستخدمين</h2><div class="tbl"><table><tr><th>الاسم</th><th>البريد</th><th>الهاتف</th><th>الباقة</th><th>الحالة</th><th>تاريخ التسجيل</th><th>إجراءات</th></tr>' +
     users.map(x => '<tr><td>' + esc(x.full_name) + '</td><td dir="ltr">' + esc(x.email) + '</td><td dir="ltr">' + esc(x.phone) + '</td><td>' + planName(x.plan) + (x.role === 'super_admin' ? ' (أدمن)' : '') + '</td><td>' + esc(status(x).text) + (x.is_disabled ? ' - معطّل' : '') + '</td><td>' + new Date(x.created_at).toLocaleDateString('ar-EG') + '</td><td class="act">' +
     (x.id === me.id ? '' : '<button class="btn sm ' + (x.is_disabled ? '' : 'warn') + '" data-a="dis" data-id="' + x.id + '" data-v="' + !x.is_disabled + '">' + (x.is_disabled ? 'تفعيل الحساب' : 'تعطيل') + '</button>') +
     '<button class="btn sm" data-a="plan" data-id="' + x.id + '" data-p="monthly" data-d="30">شهري 30 يوم</button><button class="btn sm" data-a="plan" data-id="' + x.id + '" data-p="yearly" data-d="365">سنوي 365 يوم</button><button class="btn sm ghost" data-a="plan" data-id="' + x.id + '" data-p="trial" data-d="3">تجربة +3 أيام</button></td></tr>').join('') + '</table></div>' +
     '<h2 style="margin-top:32px">المواقع</h2><div class="tbl"><table><tr><th>الموقع</th><th>الرابط</th><th>النوع</th><th>صاحب الموقع</th><th>الحالة</th><th>إجراءات</th></tr>' +
     (sites.length ? sites.map(x => '<tr><td>' + esc(x.name) + '</td><td><a href="#/s/' + esc(x.slug) + '" target="_blank" dir="ltr">' + esc(x.slug) + '</a></td><td>' + TYPE_NAMES[x.site_type] + '</td><td dir="ltr">' + esc(email[x.owner_id] || '') + '</td><td>' + (x.status === 'active' ? 'شغال' : 'موقوف') + '</td><td class="act"><button class="btn sm ' + (x.status === 'active' ? 'warn' : '') + '" data-a="site" data-id="' + x.id + '" data-s="' + (x.status === 'active' ? 'suspended' : 'active') + '">' + (x.status === 'active' ? 'إيقاف' : 'تشغيل') + '</button><button class="btn sm warn" data-a="sdel" data-id="' + x.id + '">حذف</button></td></tr>').join('') : '<tr><td colspan="6">مفيش مواقع لسه.</td></tr>') + '</table></div></section>';
+  m.querySelector('#setf').onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(e.target), msg = document.getElementById('amsg'); msg.textContent = '';
+    const cash = String(f.get('cash')).replace(/[^0-9]/g, '');
+    let wa = String(f.get('wa')).replace(/[^0-9]/g, '');
+    if (wa.startsWith('0') && wa.length === 11) wa = '20' + wa.slice(1);
+    if (cash.length < 8 || cash.length > 15 || wa.length < 10 || wa.length > 15) { msg.textContent = 'راجع الأرقام اللي كتبتها.'; return; }
+    const now = new Date().toISOString();
+    const r = await sb.from('app_settings').upsert([
+      { key: 'vodafone_cash', value: cash, updated_at: now },
+      { key: 'whatsapp', value: wa, updated_at: now },
+      { key: 'launch_date', value: new Date(f.get('launch') + 'T00:00:00').toISOString(), updated_at: now }
+    ], { onConflict: 'key' });
+    if (r.error) { msg.textContent = r.error.message; return; }
+    route();
+  };
   m.onclick = async e => {
     const b = e.target.closest('button'); if (!b) return;
     const msg = document.getElementById('amsg'); msg.textContent = '';
