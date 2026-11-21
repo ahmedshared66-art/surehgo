@@ -89,28 +89,32 @@ async function aiGenerate(siteId, blocks, st, draw) {
 }
 
 // ====== الاشتراك: دفع يدوي بفودافون كاش، والتفعيل بيتم من لوحة الأدمن ======
-const planLabel = p => p === 'yearly' ? 'سنوي' : 'شهري';
-const planPrice = p => p === 'yearly' ? C.PRICE_YEARLY : C.PRICE_MONTHLY;
+const planLabel = p => typeof p === 'object' ? p.name : p === 'yearly' ? 'سنوي' : 'شهري';
+const planPrice = p => typeof p === 'object' ? Number(p.price).toLocaleString('ar-EG') + ' جنيه' : p === 'yearly' ? C.PRICE_YEARLY : C.PRICE_MONTHLY;
 
-const payHtml = () =>
-  '<h2>الاشتراك</h2><div class="pay"><button type="button" class="btn" data-pay="monthly">اشترك شهري: ' + esc(C.PRICE_MONTHLY) +
-  '</button> <button type="button" class="btn" data-pay="yearly">اشترك سنوي: ' + esc(C.PRICE_YEARLY) +
-  '</button></div><div id="pay-info"></div>';
+const payHtml = () => {
+  const plans = Array.isArray(window.APP_PLANS) ? window.APP_PLANS : [];
+  const choices = plans.length ? plans.map(p => '<article class="plan-card"><h3>' + esc(p.name) + '</h3><p>' + esc(p.description) + '</p><b>' + esc(planPrice(p)) + '</b><small>لمدة ' + esc(p.duration_days) + ' يوم · ' + (p.max_sites === -1 ? 'مواقع غير محدودة' : esc(p.max_sites) + ' مواقع') + ' · ' + (p.max_products === -1 ? 'منتجات غير محدودة' : esc(p.max_products) + ' منتج') + '</small><button type="button" class="btn" data-pay="' + esc(p.id) + '">اختيار الباقة</button></article>').join('') :
+    '<button type="button" class="btn" data-pay="monthly">اشترك شهري: ' + esc(C.PRICE_MONTHLY) + '</button> <button type="button" class="btn" data-pay="yearly">اشترك سنوي: ' + esc(C.PRICE_YEARLY) + '</button>';
+  return '<h2>اختار اشتراكك</h2><div class="plan-choices">' + choices + '</div><div id="pay-info"></div>';
+};
 
 async function startPay(plan, btn) {
-  if (!confirm('هتبعت طلب اشتراك ' + planLabel(plan) + ' (' + planPrice(plan) + '). الاشتراك مش بيتفعّل غير بعد ما الأدمن يراجع التحويل ويوافق. تكمل؟')) return;
+  const chosen = (window.APP_PLANS || []).find(p => p.id === plan || p.code === plan);
+  const label = chosen ? chosen.name : planLabel(plan), price = chosen ? planPrice(chosen) : planPrice(plan);
+  if (!confirm('هتبعت طلب اشتراك ' + label + ' (' + price + '). الاشتراك مش بيتفعّل غير بعد ما الأدمن يراجع التحويل ويوافق. تكمل؟')) return;
   const box = document.getElementById('pay-info'); if (!box) return;
   const cfg = {};
   try { const { data } = await sb.from('app_settings').select('key,value').in('key', ['vodafone_cash', 'whatsapp']); (data || []).forEach(x => cfg[x.key] = x.value); } catch {}
   const cash = String(cfg.vodafone_cash || C.VODAFONE_CASH || '').trim();
   const wa = String(cfg.whatsapp || C.WHATSAPP || '').replace(/[^0-9]/g, '');
   if (!cash || !wa) { box.innerHTML = '<p class="msg">طريقة الدفع لسه مش مجهزة من الإدارة.</p>'; return; }
-  const text = 'السلام عليكم، حولت اشتراك ' + planLabel(plan) + ' (' + planPrice(plan) + ') على فودافون كاش.\n' +
+  const text = 'السلام عليكم، حولت اشتراك ' + label + ' (' + price + ') على فودافون كاش.\n' +
     'الاسم: ' + (me.full_name || '') + '\nالبريد: ' + (me.email || '') + '\nالهاتف: ' + (me.phone || '');
   const link = 'https://wa.me/' + wa + '?text=' + encodeURIComponent(text);
   box.innerHTML =
     '<div style="border:1px solid var(--line);background:#fff;border-radius:8px;padding:18px;margin:14px 0;max-width:520px">' +
-    '<h3 style="margin:0 0 10px">اشتراك ' + planLabel(plan) + ': ' + esc(planPrice(plan)) + '</h3>' +
+    '<h3 style="margin:0 0 10px">اشتراك ' + esc(label) + ': ' + esc(price) + '</h3>' +
     '<ol style="margin:0 0 12px;padding-inline-start:20px">' +
     '<li>حوّل <b>' + esc(planPrice(plan)) + '</b> على فودافون كاش للرقم:<br><b dir="ltr" style="font-size:1.3rem">' + esc(cash) + '</b></li>' +
     '<li>اكتب رقم الموبايل اللي حوّلت منه تحت واضغط إرسال.</li></ol>' +
@@ -124,7 +128,9 @@ async function startPay(plan, btn) {
   f.onsubmit = async ev => {
     ev.preventDefault(); msg.className = 'msg'; msg.textContent = ''; go.disabled = true;
     const fd = new FormData(f);
-    const { error } = await sb.rpc('request_subscription', { p_plan: plan, p_sender: fd.get('sender').trim(), p_note: fd.get('note').trim() });
+    const { error } = chosen
+      ? await sb.rpc('request_custom_subscription', { p_plan: chosen.id, p_sender: fd.get('sender').trim(), p_note: fd.get('note').trim() })
+      : await sb.rpc('request_subscription', { p_plan: plan, p_sender: fd.get('sender').trim(), p_note: fd.get('note').trim() });
     go.disabled = false;
     if (error) { msg.textContent = /too_many_pending/.test(error.message || '') ? 'عندك طلبات لسه تحت المراجعة. استنى الرد عليها.' : 'تعذر إرسال الطلب. جرّب تاني.'; return; }
     f.reset(); msg.className = 'msg ok'; msg.textContent = 'تم استلام طلبك وهو بانتظار تأكيد الأدمن. هيتفعّل اشتراكك بعد مراجعة التحويل (خلال 24 ساعة).';

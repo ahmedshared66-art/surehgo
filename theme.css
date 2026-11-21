@@ -1,4 +1,5 @@
 :root{--r:8px;--font:'Cairo';--nile2:color-mix(in srgb,var(--nile) 78%,#fff)}
+.plan-choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:18px 0}.plan-card{display:grid;gap:10px;align-content:start;padding:20px;border:1px solid var(--line);border-radius:calc(var(--r)*1.5);background:#fff;box-shadow:0 6px 20px rgba(16,32,43,.07)}.plan-card h3,.plan-card p{margin:0}.plan-card>b{font-size:1.35rem;color:var(--nile)}.plan-card small{color:#52626d}
 body{font-family:var(--font),Tahoma,sans-serif}
 input,textarea,select,.btn,button.s-btn{font-family:var(--font),Tahoma,sans-serif}
 .nav{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--white) 88%,transparent);backdrop-filter:blur(8px)}

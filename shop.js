@@ -156,7 +156,7 @@ async function manage(m, id) {
       '<tr><td>' + esc(x.customer_name) + '</td><td dir="ltr">' + esc(x.customer_phone) + '</td><td>' + esc(x.booking_date) + ' ' + esc(String(x.booking_time).slice(0, 5)) + '</td><td style="white-space:normal">' + esc(x.note) + '</td><td><select data-bst="' + esc(x.id) + '">' + opts(BK, x.status) + '</select></td></tr>').join('') + '</table></div>' : '<p>لسه مفيش حجوزات.</p>') +
     '</section>';
 
-  const msg = m.querySelector('#mmsg'), done = r => { if (r.error) { msg.textContent = 'حصلت مشكلة: ' + r.error.message; return; } route(); };
+  const msg = m.querySelector('#mmsg'), done = r => { if (r.error) { const e = r.error.message || ''; msg.textContent = /product_limit_reached/.test(e) ? 'وصلت لحد المنتجات المسموح به في باقتك.' : /subscription_expired/.test(e) ? 'انتهى اشتراكك. جدّده لإضافة منتجات أو مواقع.' : 'حصلت مشكلة: ' + e; return; } route(); };
 
   m.querySelector('#bken').onchange = async e => done(await sb.from('sites').update({ booking_enabled: e.target.checked }).eq('id', id));
 
