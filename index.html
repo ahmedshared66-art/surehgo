@@ -10,37 +10,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=sitefix-20261121-3">
-<link rel="stylesheet" href="shop.css?v=sitefix-20261121-3">
-<link rel="stylesheet" href="theme.css?v=sitefix-20261121-3">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="shop.css">
+<link rel="stylesheet" href="theme.css">
 </head>
 <body>
-<div id="app"><main id="app-loading" style="max-width:800px;margin:12vh auto;padding:24px;text-align:center;font-family:Tahoma,sans-serif">جاري تحميل الموقع…</main></div>
-<script>
-window.__siteLoadFailure = function(text) {
-  var app = document.getElementById('app');
-  if (!app || !app.querySelector('#app-loading')) return;
-  var main = document.createElement('main');
-  main.style.cssText = 'max-width:800px;margin:12vh auto;padding:24px;text-align:center;font-family:Tahoma,sans-serif';
-  var title = document.createElement('h1'); title.textContent = 'تعذر تحميل الموقع';
-  var help = document.createElement('p'); help.textContent = 'حدّث الصفحة. لو استمرت المشكلة، أرسل نص الخطأ للدعم.';
-  var detail = document.createElement('pre'); detail.dir = 'ltr'; detail.style.whiteSpace = 'pre-wrap'; detail.textContent = String(text || 'خطأ غير معروف');
-  main.append(title, help, detail); app.replaceChildren(main);
-};
-window.addEventListener('error', function(e) {
-  window.__siteLoadFailure(e.message || 'تعذر تحميل أحد ملفات الموقع');
-});
-window.addEventListener('unhandledrejection', function(e) {
-  window.__siteLoadFailure(e.reason && (e.reason.message || e.reason) || 'خطأ في تحميل البيانات');
-});
-setTimeout(function() { window.__siteLoadFailure('تحميل الموقع استغرق وقتًا أطول من اللازم. تحقق من اتصال Supabase ثم حدّث الصفحة.'); }, 15000);
-</script>
+<div id="app"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=sitefix-20261121-3" onerror="window.__siteLoadFailure('تعذر تحميل config.js')"></script>
-<script src="shop.js?v=sitefix-20261121-3" onerror="window.__siteLoadFailure('تعذر تحميل shop.js')"></script>
-<script src="theme.js?v=sitefix-20261121-3" onerror="window.__siteLoadFailure('تعذر تحميل theme.js')"></script>
-<script src="store.js?v=sitefix-20261121-3" onerror="window.__siteLoadFailure('تعذر تحميل store.js')"></script>
-<script src="extras.js?v=sitefix-20261121-3" onerror="window.__siteLoadFailure('تعذر تحميل extras.js')"></script>
-<script src="app.js?v=sitefix-20261121-3" onerror="window.__siteLoadFailure('تعذر تحميل app.js')"></script>
+<script src="config.js"></script>
+<script src="shop.js"></script>
+<script src="theme.js"></script>
+<script src="store.js"></script>
+<script src="extras.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
