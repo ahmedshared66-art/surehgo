@@ -19,7 +19,7 @@ async function shopSection(site) {
   const { data } = await sb.from('products').select('*').eq('site_id', site.id).eq('active', true).order('created_at');
   const products = data || [], byId = {};
   products.forEach(p => byId[p.id] = p);
-  if (!products.length && !site.booking_enabled) return;
+  if (!products.length && !site.booking_enabled) { if (window.storeShell) storeShell(site, [], box); return; }
   const today = new Date().toISOString().slice(0, 10);
   const cats = [...new Set(products.map(p => p.category).filter(Boolean))];
 
@@ -30,7 +30,7 @@ async function shopSection(site) {
           '<b>' + esc(p.name) + '</b><p>' + esc(p.description) + '</p><div class="price">' + money(p.price) + oldp(p) + '</div>' +
           (p.stock === 0 ? '<button type="button" class="s-btn" disabled>نفدت الكمية</button>' : '<button type="button" class="s-btn" data-add="' + esc(p.id) + '">أضف للسلة</button>') + '</div>';
       }).join('') + '</div>' +
-      '<div id="cl"></div><button type="button" class="cart-fab" aria-label="السلة">🛒 0</button>' +
+      '<button type="button" class="cart-fab" aria-label="السلة">🛒 0</button><div class="cart-panel"><button type="button" class="cp-x" aria-label="إغلاق">×</button><div id="cl"></div>' +
       '<form class="card" id="ord" hidden><h3>إتمام الطلب (الدفع عند الاستلام)</h3>' +
       '<label>الاسم<input class="rtl" name="name" required minlength="2" maxlength="100"></label>' +
       '<label>رقم الهاتف<input name="phone" type="tel" required minlength="6" maxlength="20"></label>' +
@@ -40,7 +40,7 @@ async function shopSection(site) {
       '<label>رقم العمارة / الدور / الشقة<input class="rtl" name="bld" maxlength="60"></label>' +
       '<label>علامة مميزة (اختياري)<input class="rtl" name="mark" maxlength="100"></label>' +
       '<label>ملاحظات<textarea class="rtl" name="note" rows="2" maxlength="300"></textarea></label>' +
-      '<button class="btn">تأكيد الطلب</button></form><div class="msg" id="omsg" role="alert"></div></section>'
+      '<button class="btn">تأكيد الطلب</button></form><div class="msg" id="omsg" role="alert"></div></div></section>'
     : '';
 
   const bookHtml = site.booking_enabled
@@ -60,32 +60,34 @@ async function shopSection(site) {
     c.onclick = e => { const b = e.target.closest('[data-gc]'); if (!b) return; const ch = [...box.querySelectorAll('.chip')].find(x => x.dataset.c === b.dataset.gc); if (ch) ch.click(); box.scrollIntoView({ behavior: 'smooth' }); };
   });
 
+  document.querySelectorAll('.b-cats').forEach(c => arrows(c));
+  if (window.storeShell) storeShell(site, cats, box);
   const gv = () => { const g = box.querySelector('#ord [name=gov]'); return g ? g.value : ''; };
   const shipFor = g => { const s = (site.shop && site.shop.ship) || {}, r = s.rates || {}; return Number(g in r ? r[g] : s.def) || 0; };
   const drawCart = () => {
     const el = box.querySelector('#cl'), form = box.querySelector('#ord'); if (!el) return;
     const cart = getCart(site.id), ids = Object.keys(cart).filter(k => byId[k] && cart[k] > 0);
-    if (!ids.length) { el.innerHTML = '<p class="cart-empty">السلة فاضية.</p>'; form.hidden = true; const fb = box.querySelector('.cart-fab'); if (fb) fb.textContent = '🛒 0'; return; }
+    if (!ids.length) { el.innerHTML = '<p class="cart-empty">السلة فاضية.</p>'; form.hidden = true; document.querySelectorAll('.cart-fab,.sh-cart').forEach(x => x.textContent = '🛒 0'); return; }
     const total = ids.reduce((s, k) => s + byId[k].price * cart[k], 0);
     el.innerHTML = '<h3>السلة</h3><ul class="cart">' + ids.map(k =>
       '<li><span>' + esc(byId[k].name) + '</span><span class="qty"><button type="button" data-q="-1" data-id="' + esc(k) + '">-</button> ' + cart[k] +
       ' <button type="button" data-q="1" data-id="' + esc(k) + '">+</button></span><b>' + money(byId[k].price * cart[k]) + '</b></li>').join('') +
       '</ul><div class="cart-total">المنتجات: ' + money(total) + '<br>الشحن: ' + (gv() ? money(shipFor(gv())) : 'بعد اختيار المحافظة') + '<br>الإجمالي: <b>' + money(total + (gv() ? shipFor(gv()) : 0)) + '</b></div>';
     form.hidden = false;
-    box.querySelector('.cart-fab').textContent = '🛒 ' + ids.reduce((s, k) => s + cart[k], 0) + ' | ' + money(total);
+    document.querySelectorAll('.cart-fab,.sh-cart').forEach(x => x.textContent = '🛒 ' + ids.reduce((s, k) => s + cart[k], 0) + ' | ' + money(total));
   };
   drawCart();
 
   box.addEventListener('click', e => {
     const ch = e.target.closest('.chip');
     if (ch) { box.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === ch)); filt(); return; }
-    if (e.target.closest('.cart-fab')) { box.querySelector('#cl').scrollIntoView({ behavior: 'smooth' }); return; }
+    if (e.target.closest('.cart-fab')) { if (!document.querySelector('.site[class*="sk-"]')) box.querySelector('#cl').scrollIntoView({ behavior: 'smooth' }); return; }
     const a = e.target.closest('[data-add]'), q = e.target.closest('[data-q]');
     const cart = getCart(site.id);
     if (a && byId[a.dataset.add]) cart[a.dataset.add] = Math.min((cart[a.dataset.add] || 0) + 1, 99);
     else if (q && byId[q.dataset.id]) { cart[q.dataset.id] = Math.min(Math.max((cart[q.dataset.id] || 0) + (+q.dataset.q), 0), 99); if (!cart[q.dataset.id]) delete cart[q.dataset.id]; }
     else return;
-    setCart(site.id, cart); drawCart();
+    setCart(site.id, cart); drawCart(); if (a) { const st = document.querySelector('.site[class*="sk-"]'); if (st) st.classList.add('cart-open'); }
   });
 
   box.addEventListener('input', e => { if (e.target.id === 'q') filt(); });

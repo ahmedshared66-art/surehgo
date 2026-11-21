@@ -131,6 +131,7 @@ async function siteView(slug) {
     '<div id="shop-box"></div></main><footer class="s-foot">' + (ph ? '<div dir="ltr">' + esc(ph) + '</div>' : '') + '<a href="' + esc(BASE) + '">Powered by ' + esc(C.PLATFORM_NAME) + '</a></footer></div>';
   shopSection(data);
   siteExtras(data);
+  siteEnhance();
 }
 
 async function dashboard(m) {
