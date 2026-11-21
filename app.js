@@ -115,7 +115,7 @@ async function siteView(slug) {
   document.title = data.name;
   const ph = (data.phone || '').replace(/[^0-9+]/g, '');
   root.innerHTML = '<div class="site" style="--c:' + esc(data.color) + ';--t:' + (lum(data.color) > 150 ? '#10202B' : '#fff') + '"><header class="s-hero"><h1>' + esc(data.name) + '</h1><p>' + esc(data.description) + '</p>' + (ph ? '<a class="s-btn" href="tel:' + ph + '">اتصل بنا</a>' : '') + '</header><main class="s-body">' +
-    (TEMPLATES[data.site_type] || []).map(x => '<section><h2>' + x[0] + '</h2><p>' + x[1] + '</p></section>').join('') +
+    (arr(data.content).length ? arr(data.content).map(renderBlock).join('') : (TEMPLATES[data.site_type] || []).map(x => '<section><h2>' + x[0] + '</h2><p>' + x[1] + '</p></section>').join('')) +
     '</main><footer class="s-foot">' + (ph ? '<div dir="ltr">' + esc(ph) + '</div>' : '') + '<a href="#/">Powered by ' + esc(C.PLATFORM_NAME) + '</a></footer></div>';
 }
 
@@ -126,7 +126,7 @@ async function dashboard(m) {
   const sites = data || [];
   const canCreate = s.ok && sites.length < 3;
   m.innerHTML = '<section class="wrap"><h1>أهلاً ' + esc(me.full_name) + '</h1><div class="status ' + (s.ok ? 'on' : 'off') + '">' + esc(s.text) + '</div>' +
-    '<h2>مواقعي</h2>' + (sites.length ? '<ul class="mysites">' + sites.map(x => '<li><div><b>' + esc(x.name) + '</b> <small>(' + TYPE_NAMES[x.site_type] + (x.status === 'suspended' ? ' - موقوف من الإدارة' : '') + ')</small><br><a href="#/s/' + esc(x.slug) + '" target="_blank" dir="ltr">' + esc(siteUrl(x.slug)) + '</a></div><div class="act"><a class="btn sm" href="#/edit/' + x.id + '">تعديل</a><button class="btn sm warn" data-del="' + x.id + '">حذف</button></div></li>').join('') + '</ul>' : '<p>لسه معندكش مواقع.</p>') +
+    '<h2>مواقعي</h2>' + (sites.length ? '<ul class="mysites">' + sites.map(x => '<li><div><b>' + esc(x.name) + '</b> <small>(' + TYPE_NAMES[x.site_type] + (x.status === 'suspended' ? ' - موقوف من الإدارة' : '') + ')</small><br><a href="#/s/' + esc(x.slug) + '" target="_blank" dir="ltr">' + esc(siteUrl(x.slug)) + '</a></div><div class="act"><a class="btn sm" href="#/builder/' + x.id + '">بناء الموقع</a><a class="btn sm ghost" href="#/edit/' + x.id + '">البيانات</a><button class="btn sm warn" data-del="' + x.id + '">حذف</button></div></li>').join('') + '</ul>' : '<p>لسه معندكش مواقع.</p>') +
     (canCreate ? '<h2>إنشاء موقع جديد</h2><form class="card" id="nf"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80"></label><label>الرابط (حروف إنجليزية صغيرة وأرقام وشرطة)<input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,29}" maxlength="30" placeholder="my-restaurant"></label><label>نوع النشاط<select name="type">' + Object.keys(TYPE_NAMES).map(k => '<option value="' + k + '">' + TYPE_NAMES[k] + '</option>').join('') + '</select></label><label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600"></textarea></label><label>اللون المفضل<input type="color" name="color" value="#0B5C6B"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20"></label><button class="btn">إنشاء الموقع</button><div class="msg" role="alert"></div></form>'
       : '<p class="msg">' + (s.ok ? 'وصلت للحد الأقصى (3 مواقع).' : 'مينفعش تنشئ مواقع جديدة لأن التجربة أو الاشتراك انتهى.') + '</p>') + '</section>';
   const nf = m.querySelector('#nf');
@@ -189,6 +189,132 @@ async function admin(m) {
   };
 }
 
+const BLOCKS = {
+  heading:{n:'عنوان', d:() => ({type:'heading', text:'عنوان جديد'})},
+  text:{n:'نص', d:() => ({type:'text', text:'اكتب النص هنا'})},
+  image:{n:'صورة', d:() => ({type:'image', url:'', alt:''})},
+  video:{n:'فيديو', d:() => ({type:'video', url:''})},
+  button:{n:'زر', d:() => ({type:'button', label:'تواصل معنا', url:''})},
+  gallery:{n:'معرض صور', d:() => ({type:'gallery', urls:[]})},
+  faq:{n:'أسئلة شائعة', d:() => ({type:'faq', items:[{q:'', a:''}]})},
+  reviews:{n:'تقييمات', d:() => ({type:'reviews', items:[{name:'', text:''}]})},
+  map:{n:'خريطة', d:() => ({type:'map', url:''})}
+};
+const U_HTTPS = /^https:\/\//i, U_LINK = /^(https:\/\/|tel:|mailto:)/i, U_MAP = /^https:\/\/(www\.google\.com|maps\.google\.com)\/maps\/embed/i;
+const okUrl = (u, re) => typeof u === 'string' && re.test(u) ? u : '';
+const arr = x => Array.isArray(x) ? x : [];
+const nl = s => esc(s).replace(/\n/g, '<br>');
+
+function renderBlock(b) {
+  if (!b || typeof b !== 'object') return '';
+  let u;
+  switch (b.type) {
+    case 'heading': return '<h2 class="b-h">' + esc(b.text) + '</h2>';
+    case 'text': return '<p class="b-t">' + nl(b.text) + '</p>';
+    case 'image': u = okUrl(b.url, U_HTTPS); return u ? '<figure class="b-img"><img src="' + esc(u) + '" alt="' + esc(b.alt) + '" loading="lazy"></figure>' : '';
+    case 'video': u = okUrl(b.url, U_HTTPS); return u ? '<video class="b-vid" controls preload="metadata" src="' + esc(u) + '"></video>' : '';
+    case 'button': u = okUrl(b.url, U_LINK); return u ? '<p><a class="s-btn" href="' + esc(u) + '" rel="noopener">' + esc(b.label) + '</a></p>' : '';
+    case 'gallery': return '<div class="b-gal">' + arr(b.urls).map(x => okUrl(x, U_HTTPS) ? '<img src="' + esc(x) + '" alt="" loading="lazy">' : '').join('') + '</div>';
+    case 'faq': return '<div class="b-faq">' + arr(b.items).filter(x => x && x.q).map(x => '<details><summary>' + esc(x.q) + '</summary><p>' + nl(x.a) + '</p></details>').join('') + '</div>';
+    case 'reviews': return '<div class="b-rev">' + arr(b.items).filter(x => x && x.text).map(x => '<blockquote>' + nl(x.text) + '<cite>' + esc(x.name) + '</cite></blockquote>').join('') + '</div>';
+    case 'map': u = okUrl(b.url, U_MAP); return u ? '<iframe class="b-map" src="' + esc(u) + '" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>' : '';
+  }
+  return '';
+}
+
+const MIME = {'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp', 'video/mp4':'mp4', 'application/pdf':'pdf'};
+async function uploadFile(file, kinds) {
+  if (!MIME[file.type] || !kinds.includes(file.type.split('/')[0])) throw new Error('نوع الملف غير مدعوم هنا.');
+  if (file.size > 20 * 1024 * 1024) throw new Error('الملف أكبر من 20 ميجا.');
+  const path = me.id + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + MIME[file.type];
+  const { error } = await sb.storage.from('site-assets').upload(path, file, { contentType: file.type });
+  if (error) throw new Error(error.message);
+  return sb.storage.from('site-assets').getPublicUrl(path).data.publicUrl;
+}
+
+async function builder(m, id) {
+  if (!me) { location.hash = '#/login'; return; }
+  const { data } = await sb.from('sites').select('*').eq('id', id).maybeSingle();
+  if (!data || data.owner_id !== me.id || data.status !== 'active') { location.hash = '#/dashboard'; return; }
+  const blocks = arr(data.content).filter(b => b && BLOCKS[b.type]);
+  m.innerHTML = '<section class="bld"><aside class="pal"><h3>العناصر</h3><p class="hint">اسحب العنصر وضعه في الصفحة، أو اضغط عليه.</p>' +
+    Object.keys(BLOCKS).map(k => '<button type="button" class="pal-i" draggable="true" data-new="' + k + '">' + BLOCKS[k].n + '</button>').join('') +
+    '</aside><div class="cv"><div class="bar"><b>' + esc(data.name) + '</b><span class="grow"></span><span id="st" role="status"></span><button type="button" class="btn" id="save">حفظ</button><a class="btn ghost" href="#/s/' + esc(data.slug) + '" target="_blank">معاينة</a><a class="btn ghost" href="#/dashboard">رجوع</a></div><div id="canvas"></div></div></section>';
+  const cv = m.querySelector('#canvas'), st = t => m.querySelector('#st').textContent = t;
+
+  const inp = (i, f, label, v, ltr, extra) => '<label>' + label + '<input' + (ltr ? ' dir="ltr"' : ' class="rtl"') + ' data-i="' + i + '" data-f="' + f + '" value="' + esc(v) + '" ' + (extra || '') + '></label>';
+  const up = (i, f, accept, kinds, label, multi) => '<label>' + label + '<input type="file" accept="' + accept + '"' + (multi ? ' multiple' : '') + ' data-up="' + kinds + '" data-i="' + i + '" data-f="' + f + '"></label>';
+  const items = (b, i, a, bl, al, bl2) => arr(b.items).map((x, j) => '<div class="item">' + '<input class="rtl" placeholder="' + al + '" data-i="' + i + '" data-f="items" data-j="' + j + '" data-k="' + a + '" value="' + esc(x[a]) + '"><textarea class="rtl" rows="2" placeholder="' + bl2 + '" data-i="' + i + '" data-f="items" data-j="' + j + '" data-k="' + bl + '">' + esc(x[bl]) + '</textarea><button type="button" class="btn sm warn" data-rm="' + j + '" data-i="' + i + '">حذف</button></div>').join('') + '<button type="button" class="btn sm ghost" data-add="' + i + '">إضافة</button>';
+  function fields(b, i) {
+    switch (b.type) {
+      case 'heading': return inp(i, 'text', 'النص', b.text, false, 'maxlength="200"');
+      case 'text': return '<label>النص<textarea class="rtl" rows="4" data-i="' + i + '" data-f="text" maxlength="3000">' + esc(b.text) + '</textarea></label>';
+      case 'image': return (okUrl(b.url, U_HTTPS) ? '<img class="th" src="' + esc(b.url) + '" alt="">' : '') + up(i, 'url', 'image/jpeg,image/png,image/webp', 'image', 'رفع صورة (JPG أو PNG أو WEBP)') + inp(i, 'url', 'أو رابط الصورة (https)', b.url, true) + inp(i, 'alt', 'وصف الصورة', b.alt);
+      case 'video': return up(i, 'url', 'video/mp4', 'video', 'رفع فيديو (MP4 حتى 20 ميجا)') + inp(i, 'url', 'أو رابط فيديو MP4 (https)', b.url, true);
+      case 'button': return inp(i, 'label', 'نص الزر', b.label, false, 'maxlength="60"') + inp(i, 'url', 'الرابط (https أو tel: أو mailto:)', b.url, true) + up(i, 'url', 'application/pdf', 'application', 'أو ارفع ملف PDF للزر');
+      case 'gallery': return '<div class="ths">' + arr(b.urls).map((x, j) => '<span><img class="th" src="' + esc(x) + '" alt=""><button type="button" class="btn sm warn" data-gdel="' + j + '" data-i="' + i + '">x</button></span>').join('') + '</div>' + up(i, 'urls', 'image/jpeg,image/png,image/webp', 'image', 'إضافة صور (حتى 12)', true);
+      case 'faq': return items(b, i, 'q', 'a', 'السؤال', 'الإجابة');
+      case 'reviews': return items(b, i, 'name', 'text', 'اسم العميل', 'نص التقييم');
+      case 'map': return inp(i, 'url', 'رابط الخريطة (قيمة src من Embed a map في Google Maps)', b.url, true);
+    }
+    return '';
+  }
+  function draw() {
+    cv.innerHTML = blocks.map((b, i) => '<div class="blk" data-i="' + i + '"><div class="bh" draggable="true" data-i="' + i + '"><span>⠿ ' + BLOCKS[b.type].n + '</span><span><button type="button" data-m="up" data-i="' + i + '">↑</button><button type="button" data-m="down" data-i="' + i + '">↓</button><button type="button" data-m="del" data-i="' + i + '">حذف</button></span></div>' + fields(b, i) + '</div>').join('') +
+      '<div class="drop-end">' + (blocks.length ? 'اسحب هنا للإضافة في آخر الصفحة' : 'ابدأ بسحب عنصر من القائمة وضعه هنا') + '</div>';
+  }
+  draw();
+  const add = k => { if (blocks.length >= 40) { st('وصلت للحد الأقصى (40 عنصر).'); return; } blocks.push(BLOCKS[k].d()); draw(); };
+
+  m.addEventListener('dragstart', e => {
+    const n = e.target.closest && e.target.closest('[data-new]'), h = e.target.closest && e.target.closest('.bh');
+    if (n) e.dataTransfer.setData('text/plain', 'new:' + n.dataset.new); else if (h) e.dataTransfer.setData('text/plain', 'move:' + h.dataset.i);
+  });
+  cv.addEventListener('dragover', e => e.preventDefault());
+  cv.addEventListener('drop', e => {
+    e.preventDefault();
+    const d = e.dataTransfer.getData('text/plain'), t = e.target.closest('.blk');
+    let at = t ? +t.dataset.i : blocks.length;
+    if (d.startsWith('new:') && BLOCKS[d.slice(4)] && blocks.length < 40) blocks.splice(at, 0, BLOCKS[d.slice(4)].d());
+    else if (d.startsWith('move:')) { const from = +d.slice(5), [x] = blocks.splice(from, 1); if (!x) return; if (at > from) at--; blocks.splice(at, 0, x); }
+    draw();
+  });
+  cv.addEventListener('input', e => {
+    const t = e.target, b = blocks[+t.dataset.i]; if (!b || t.dataset.f === undefined) return;
+    if (t.dataset.j !== undefined) b[t.dataset.f][+t.dataset.j][t.dataset.k] = t.value; else b[t.dataset.f] = t.value;
+  });
+  cv.addEventListener('change', async e => {
+    const t = e.target; if (!t.dataset.up) return;
+    const b = blocks[+t.dataset.i], files = [...t.files]; if (!b || !files.length) return;
+    st('جاري الرفع...');
+    try {
+      for (const f of files) {
+        if (b.type === 'gallery' && b.urls.length >= 12) break;
+        const u = await uploadFile(f, t.dataset.up.split(','));
+        if (b.type === 'gallery') b.urls.push(u); else b.url = u;
+      }
+      st('تم الرفع. اضغط حفظ.'); draw();
+    } catch (er) { st(er.message); }
+  });
+  m.addEventListener('click', e => {
+    const n = e.target.closest('[data-new]'); if (n) { add(n.dataset.new); return; }
+    const b = e.target.closest('button'); if (!b) return;
+    const i = +b.dataset.i, mv = b.dataset.m;
+    if (mv === 'del') blocks.splice(i, 1);
+    else if (mv === 'up' && i > 0) [blocks[i - 1], blocks[i]] = [blocks[i], blocks[i - 1]];
+    else if (mv === 'down' && i < blocks.length - 1) [blocks[i + 1], blocks[i]] = [blocks[i], blocks[i + 1]];
+    else if (b.dataset.add !== undefined) { const x = blocks[+b.dataset.add]; if (x.items.length < 20) x.items.push(x.type === 'faq' ? {q:'', a:''} : {name:'', text:''}); }
+    else if (b.dataset.rm !== undefined) blocks[i].items.splice(+b.dataset.rm, 1);
+    else if (b.dataset.gdel !== undefined) blocks[i].urls.splice(+b.dataset.gdel, 1);
+    else if (b.id === 'save') {
+      st('جاري الحفظ...');
+      sb.from('sites').update({ content: blocks }).eq('id', id).then(r => st(r.error ? 'فشل الحفظ: ' + r.error.message : 'تم الحفظ.'));
+      return;
+    } else return;
+    draw();
+  });
+}
+
 function terms(m) {
   m.innerHTML = '<section class="wrap"><h1>شروط الاستخدام</h1><p>باستخدامك ' + esc(C.PLATFORM_NAME) + ' فأنت توافق على الآتي:</p><ol><li>أنت المسؤول عن محتوى موقعك وصحته، وعن أي صور أو فيديوهات ترفعها.</li><li>يُمنع نشر أي محتوى مخالف للقانون، أو مسيء، أو ينتهك حقوق الآخرين، أو يتضمن احتيالاً.</li><li>من حق إدارة المنصة إيقاف أو حذف أي موقع أو تعطيل أي حساب يخالف هذه الشروط، دون إخطار مسبق.</li><li>التجربة المجانية مدتها 3 أيام، وتعرض إعلانات على المواقع المجانية.</li><li>الاشتراكات المدفوعة غير قابلة للاسترداد إلا بقرار من الإدارة.</li><li>قد نحدّث هذه الشروط، واستمرارك في الاستخدام يعني موافقتك عليها.</li></ol><p><a href="#/">الرجوع للرئيسية</a></p></section>';
 }
@@ -203,7 +329,7 @@ async function route() {
   root.innerHTML = nav() + (notice ? '<div class="banner" role="alert">' + esc(notice) + '</div>' : '') + '<main></main><footer><span>© ' + new Date().getFullYear() + ' ' + esc(C.PLATFORM_NAME) + '</span><a href="#/terms">شروط الاستخدام</a></footer>';
   notice = '';
   const main = root.querySelector('main');
-  if (h.startsWith('/edit/')) await editSite(main, h.slice(6)); else await (routes[h] || home)(main);
+  if (h.startsWith('/builder/')) await builder(main, h.slice(9)); else if (h.startsWith('/edit/')) await editSite(main, h.slice(6)); else await (routes[h] || home)(main);
   const lo = document.getElementById('logout');
   if (lo) lo.onclick = async () => { await sb.auth.signOut(); location.hash = '#/'; route(); };
 }
