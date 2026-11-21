@@ -13,3 +13,8 @@ button.s-btn{border:0;cursor:pointer;font:800 1rem Cairo,sans-serif}
 label.chk{display:flex;align-items:center;gap:8px;font-weight:600}
 label.chk input{width:auto}
 .tbl select{font:inherit;padding:4px 8px;border:1px solid #9aa9b4;border-radius:6px;background:#fff}
+
+.ad-bar{background:#FFF3D6;border-bottom:2px solid var(--sun);text-align:center;padding:8px 5vw;font-weight:600;font-size:.9rem}
+.ad-bar a{color:var(--ink);text-decoration:underline}
+.wa{position:fixed;bottom:18px;inset-inline-start:18px;background:#25D366;color:var(--ink);padding:10px 18px;border-radius:999px;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.25);z-index:5}
+.soc{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}

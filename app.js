@@ -118,6 +118,7 @@ async function siteView(slug) {
     (arr(data.content).length ? arr(data.content).map(renderBlock).join('') : (TEMPLATES[data.site_type] || []).map(x => '<section><h2>' + x[0] + '</h2><p>' + x[1] + '</p></section>').join('')) +
     '<div id="shop-box"></div></main><footer class="s-foot">' + (ph ? '<div dir="ltr">' + esc(ph) + '</div>' : '') + '<a href="#/">Powered by ' + esc(C.PLATFORM_NAME) + '</a></footer></div>';
   shopSection(data);
+  siteExtras(data);
 }
 
 async function dashboard(m) {
@@ -149,12 +150,12 @@ async function editSite(m, id) {
   if (!me) { location.hash = '#/login'; return; }
   const { data } = await sb.from('sites').select('*').eq('id', id).maybeSingle();
   if (!data || data.owner_id !== me.id) { location.hash = '#/dashboard'; return; }
-  m.innerHTML = '<section class="wrap"><h1>تعديل: ' + esc(data.name) + '</h1><form class="card"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80" value="' + esc(data.name) + '"></label><label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600">' + esc(data.description) + '</textarea></label><label>اللون المفضل<input type="color" name="color" value="' + esc(data.color) + '"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20" value="' + esc(data.phone) + '"></label><button class="btn">حفظ التعديلات</button><div class="msg" role="alert"></div></form><p><a href="#/dashboard">الرجوع لمواقعي</a></p></section>';
+  m.innerHTML = '<section class="wrap"><h1>تعديل: ' + esc(data.name) + '</h1><form class="card"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80" value="' + esc(data.name) + '"></label><label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600">' + esc(data.description) + '</textarea></label><label>اللون المفضل<input type="color" name="color" value="' + esc(data.color) + '"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20" value="' + esc(data.phone) + '"></label><label>واتساب (رقم بالكود الدولي من غير + مثل 201001234567)<input name="whatsapp" type="tel" maxlength="15" pattern="[0-9]{8,15}" value="' + esc(data.whatsapp) + '"></label><label>رابط فيسبوك (يبدأ بـ https)<input name="facebook" type="url" maxlength="200" value="' + esc(data.facebook) + '"></label><label>رابط إنستجرام (يبدأ بـ https)<input name="instagram" type="url" maxlength="200" value="' + esc(data.instagram) + '"></label><button class="btn">حفظ التعديلات</button><div class="msg" role="alert"></div></form><p><a href="#/dashboard">الرجوع لمواقعي</a></p></section>';
   m.querySelector('form').onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(e.target), msg = m.querySelector('.msg');
-    const { error } = await sb.from('sites').update({ name: f.get('name').trim(), description: f.get('description').trim(), color: f.get('color'), phone: f.get('phone').trim() }).eq('id', id);
-    if (error) { msg.textContent = siteErr(error); return; }
+    const { error } = await sb.from('sites').update({ name: f.get('name').trim(), description: f.get('description').trim(), color: f.get('color'), phone: f.get('phone').trim(), whatsapp: f.get('whatsapp').trim(), facebook: f.get('facebook').trim(), instagram: f.get('instagram').trim() }).eq('id', id);
+    if (error) { msg.textContent = error.code === '23514' ? 'تأكد: واتساب أرقام فقط بالكود الدولي، وروابط فيسبوك وإنستجرام تبدأ بـ https://' : siteErr(error); return; }
     location.hash = '#/dashboard';
   };
 }
