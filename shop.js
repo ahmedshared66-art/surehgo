@@ -7,6 +7,10 @@ const setCart = (id, c) => { try { localStorage.setItem('cart:' + id, JSON.strin
 const ORD = { new: 'جديد', confirmed: 'تم التأكيد', delivered: 'تم التسليم', cancelled: 'ملغي' };
 const BK = { new: 'جديد', confirmed: 'مؤكد', done: 'تم', cancelled: 'ملغي' };
 const opts = (map, cur) => Object.keys(map).map(k => '<option value="' + k + '"' + (k === cur ? ' selected' : '') + '>' + map[k] + '</option>').join('');
+const GOVS = ['القاهرة','الجيزة','الإسكندرية','القليوبية','الشرقية','الدقهلية','البحيرة','المنوفية','الغربية','كفر الشيخ','دمياط','بورسعيد','الإسماعيلية','السويس','الفيوم','بني سويف','المنيا','أسيوط','سوهاج','قنا','الأقصر','أسوان','البحر الأحمر','الوادي الجديد','مطروح','شمال سيناء','جنوب سيناء'];
+const badge = p => p.stock === 0 ? '<span class="bdg out">نفدت</span>' : p.old_price > p.price ? '<span class="bdg">-' + Math.round((1 - p.price / p.old_price) * 100) + '%</span>' : p.stock === 1 ? '<span class="bdg last">آخر قطعة</span>' : '';
+const oldp = p => p.old_price > p.price ? '<s class="old">' + money(p.old_price) + '</s>' : '';
+const addr = f => [f.get('city'), f.get('street'), f.get('bld') && 'عمارة ' + f.get('bld'), f.get('mark')].map(x => String(x || '').trim()).filter(Boolean).join(' - ');
 const fdate = d => new Date(d).toLocaleString('ar-EG');
 
 // ====== صفحة الموقع العامة: المنتجات والسلة والحجز ======
@@ -17,19 +21,24 @@ async function shopSection(site) {
   products.forEach(p => byId[p.id] = p);
   if (!products.length && !site.booking_enabled) return;
   const today = new Date().toISOString().slice(0, 10);
+  const cats = [...new Set(products.map(p => p.category).filter(Boolean))];
 
   const storeHtml = products.length
-    ? '<section class="shop"><h2 class="b-h">المتجر</h2><div class="prods">' + products.map(p => {
+    ? '<section class="shop"><h2 class="b-h">المتجر</h2><div class="tools"><input class="rtl" type="search" id="q" placeholder="ابحث عن منتج" maxlength="60">' + (cats.length ? '<div class="chips"><button type="button" class="chip on" data-c="">الكل</button>' + cats.map(c => '<button type="button" class="chip" data-c="' + esc(c) + '">' + esc(c) + '</button>').join('') + '</div>' : '') + '</div><div class="prods">' + products.map(p => {
         const img = okUrl(p.image_url, U_HTTPS);
-        return '<div class="prod">' + (img ? '<img src="' + esc(img) + '" alt="' + esc(p.name) + '" loading="lazy">' : '') +
-          '<b>' + esc(p.name) + '</b><p>' + esc(p.description) + '</p><div class="price">' + money(p.price) + '</div>' +
-          '<button type="button" class="s-btn" data-add="' + esc(p.id) + '">أضف للسلة</button></div>';
+        return '<div class="prod" data-cat="' + esc(p.category || '') + '" data-n="' + esc(String(p.name).toLowerCase()) + '">' + badge(p) + (img ? '<img src="' + esc(img) + '" alt="' + esc(p.name) + '" loading="lazy">' : '') +
+          '<b>' + esc(p.name) + '</b><p>' + esc(p.description) + '</p><div class="price">' + money(p.price) + oldp(p) + '</div>' +
+          (p.stock === 0 ? '<button type="button" class="s-btn" disabled>نفدت الكمية</button>' : '<button type="button" class="s-btn" data-add="' + esc(p.id) + '">أضف للسلة</button>') + '</div>';
       }).join('') + '</div>' +
-      '<div id="cl"></div>' +
+      '<div id="cl"></div><button type="button" class="cart-fab" aria-label="السلة">🛒 0</button>' +
       '<form class="card" id="ord" hidden><h3>إتمام الطلب (الدفع عند الاستلام)</h3>' +
       '<label>الاسم<input class="rtl" name="name" required minlength="2" maxlength="100"></label>' +
       '<label>رقم الهاتف<input name="phone" type="tel" required minlength="6" maxlength="20"></label>' +
-      '<label>العنوان<textarea class="rtl" name="address" rows="2" required maxlength="300"></textarea></label>' +
+      '<label>المحافظة<select name="gov" required><option value="">اختار المحافظة</option>' + GOVS.map(g => '<option>' + g + '</option>').join('') + '</select></label>' +
+      '<label>المدينة / المنطقة<input class="rtl" name="city" required maxlength="80"></label>' +
+      '<label>الشارع<input class="rtl" name="street" required maxlength="120"></label>' +
+      '<label>رقم العمارة / الدور / الشقة<input class="rtl" name="bld" maxlength="60"></label>' +
+      '<label>علامة مميزة (اختياري)<input class="rtl" name="mark" maxlength="100"></label>' +
       '<label>ملاحظات<textarea class="rtl" name="note" rows="2" maxlength="300"></textarea></label>' +
       '<button class="btn">تأكيد الطلب</button></form><div class="msg" id="omsg" role="alert"></div></section>'
     : '';
@@ -45,21 +54,32 @@ async function shopSection(site) {
     : '';
 
   box.innerHTML = storeHtml + bookHtml;
+  const filt = () => { const q = (box.querySelector('#q') || { value: '' }).value.trim().toLowerCase(), ch = box.querySelector('.chip.on'), c = ch ? ch.dataset.c : ''; box.querySelectorAll('.prod').forEach(el => el.hidden = !!((c && el.dataset.cat !== c) || (q && !el.dataset.n.includes(q)))); };
+  document.querySelectorAll('.b-cats').forEach(c => {
+    c.innerHTML = cats.map(n => { const p = products.find(x => x.category === n && okUrl(x.image_url, U_HTTPS)); return '<button type="button" class="cat-c" data-gc="' + esc(n) + '">' + (p ? '<img src="' + esc(p.image_url) + '" alt="" loading="lazy">' : '') + '<span>' + esc(n) + '</span></button>'; }).join('');
+    c.onclick = e => { const b = e.target.closest('[data-gc]'); if (!b) return; const ch = [...box.querySelectorAll('.chip')].find(x => x.dataset.c === b.dataset.gc); if (ch) ch.click(); box.scrollIntoView({ behavior: 'smooth' }); };
+  });
 
+  const gv = () => { const g = box.querySelector('#ord [name=gov]'); return g ? g.value : ''; };
+  const shipFor = g => { const s = (site.shop && site.shop.ship) || {}, r = s.rates || {}; return Number(g in r ? r[g] : s.def) || 0; };
   const drawCart = () => {
     const el = box.querySelector('#cl'), form = box.querySelector('#ord'); if (!el) return;
     const cart = getCart(site.id), ids = Object.keys(cart).filter(k => byId[k] && cart[k] > 0);
-    if (!ids.length) { el.innerHTML = '<p class="cart-empty">السلة فاضية.</p>'; form.hidden = true; return; }
+    if (!ids.length) { el.innerHTML = '<p class="cart-empty">السلة فاضية.</p>'; form.hidden = true; const fb = box.querySelector('.cart-fab'); if (fb) fb.textContent = '🛒 0'; return; }
     const total = ids.reduce((s, k) => s + byId[k].price * cart[k], 0);
     el.innerHTML = '<h3>السلة</h3><ul class="cart">' + ids.map(k =>
       '<li><span>' + esc(byId[k].name) + '</span><span class="qty"><button type="button" data-q="-1" data-id="' + esc(k) + '">-</button> ' + cart[k] +
       ' <button type="button" data-q="1" data-id="' + esc(k) + '">+</button></span><b>' + money(byId[k].price * cart[k]) + '</b></li>').join('') +
-      '</ul><div class="cart-total">الإجمالي: <b>' + money(total) + '</b></div>';
+      '</ul><div class="cart-total">المنتجات: ' + money(total) + '<br>الشحن: ' + (gv() ? money(shipFor(gv())) : 'بعد اختيار المحافظة') + '<br>الإجمالي: <b>' + money(total + (gv() ? shipFor(gv()) : 0)) + '</b></div>';
     form.hidden = false;
+    box.querySelector('.cart-fab').textContent = '🛒 ' + ids.reduce((s, k) => s + cart[k], 0) + ' | ' + money(total);
   };
   drawCart();
 
   box.addEventListener('click', e => {
+    const ch = e.target.closest('.chip');
+    if (ch) { box.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === ch)); filt(); return; }
+    if (e.target.closest('.cart-fab')) { box.querySelector('#cl').scrollIntoView({ behavior: 'smooth' }); return; }
     const a = e.target.closest('[data-add]'), q = e.target.closest('[data-q]');
     const cart = getCart(site.id);
     if (a && byId[a.dataset.add]) cart[a.dataset.add] = Math.min((cart[a.dataset.add] || 0) + 1, 99);
@@ -68,6 +88,8 @@ async function shopSection(site) {
     setCart(site.id, cart); drawCart();
   });
 
+  box.addEventListener('input', e => { if (e.target.id === 'q') filt(); });
+  box.addEventListener('change', e => { if (e.target.name === 'gov') drawCart(); });
   box.addEventListener('submit', async e => {
     e.preventDefault();
     const form = e.target, f = new FormData(form);
@@ -75,8 +97,8 @@ async function shopSection(site) {
       const msg = box.querySelector('#omsg'); msg.className = 'msg'; msg.textContent = '';
       const cart = getCart(site.id), items = Object.keys(cart).filter(k => byId[k] && cart[k] > 0).map(k => ({ id: k, qty: cart[k] }));
       if (!items.length) { msg.textContent = 'السلة فاضية.'; return; }
-      const { error } = await sb.rpc('place_order', { p_site: site.id, p_name: f.get('name').trim(), p_phone: f.get('phone').trim(), p_address: f.get('address').trim(), p_note: f.get('note').trim(), p_items: items });
-      if (error) { msg.textContent = 'تعذر إرسال الطلب. راجع البيانات وجرّب تاني.'; return; }
+      const { error } = await sb.rpc('place_order_v2', { p_site: site.id, p_name: f.get('name').trim(), p_phone: f.get('phone').trim(), p_gov: f.get('gov'), p_address: addr(f), p_note: f.get('note').trim(), p_items: items });
+      if (error) { msg.textContent = /out_of_stock/.test(error.message || '') ? 'الكمية المطلوبة مش متاحة لواحد من المنتجات. عدّل السلة وجرّب تاني.' : 'تعذر إرسال الطلب. راجع البيانات وجرّب تاني.'; return; }
       setCart(site.id, {}); form.reset(); drawCart();
       msg.className = 'msg ok'; msg.textContent = 'تم استلام طلبك. هنتواصل معاك قريباً.';
     } else if (form.id === 'bk') {
@@ -103,13 +125,15 @@ async function manage(m, id) {
   if (err) { m.innerHTML = '<section class="wrap"><div class="msg">' + esc(err.message) + '</div><p>تأكد إنك شغّلت SQL المرحلة الرابعة.</p><p><a href="#/dashboard">الرجوع لمواقعي</a></p></section>'; return; }
   const products = p.data, orders = o.data, books = b.data;
   const vis = (vs.data && vs.data[0]) || { today: 0, week: 0, total: 0 };
+  const sh = (site.shop && site.shop.ship) || {};
   const revenue = orders.filter(x => x.status !== 'cancelled').reduce((s, x) => s + Number(x.total), 0);
 
   m.innerHTML = '<section class="wrap" style="max-width:1100px"><h1>إدارة: ' + esc(site.name) + '</h1><p><a href="#/dashboard">الرجوع لمواقعي</a> | <a href="' + esc(siteUrl(site.slug)) + '" target="_blank">فتح الموقع</a></p>' +
     '<div class="stats"><div>الطلبات: <b>' + orders.length + '</b></div><div>طلبات جديدة: <b>' + orders.filter(x => x.status === 'new').length + '</b></div><div>الإيرادات: <b>' + money(revenue) + '</b></div><div>الحجوزات: <b>' + books.length + '</b></div><div>زيارات اليوم: <b>' + vis.today + '</b></div><div>آخر 7 أيام: <b>' + vis.week + '</b></div><div>كل الزيارات: <b>' + vis.total + '</b></div></div>' +
     '<div class="msg" id="mmsg" role="alert"></div>' +
     '<h2>الحجوزات</h2><label class="chk"><input type="checkbox" id="bken"' + (site.booking_enabled ? ' checked' : '') + '> تفعيل نموذج الحجز في موقعي</label>' +
-    '<h2 style="margin-top:28px">المنتجات</h2><form class="card" id="pf"><label>اسم المنتج<input class="rtl" name="name" required maxlength="100"></label><label>السعر (جنيه)<input name="price" type="number" min="0" max="10000000" step="0.01" required></label><label>الوصف<textarea class="rtl" name="description" rows="2" maxlength="500"></textarea></label><label>صورة المنتج (اختياري)<input type="file" name="img" accept="image/jpeg,image/png,image/webp"></label><button class="btn">إضافة المنتج</button></form>' +
+    '<h2 style="margin-top:28px">الشحن</h2><form class="card" id="sf"><label>سعر الشحن العام (جنيه)<input name="def" type="number" min="0" step="0.01" value="' + esc(sh.def || 0) + '"></label><label>أسعار خاصة (سطر لكل محافظة، مثال: القاهرة=40)<textarea name="rates" rows="4">' + Object.keys(sh.rates || {}).map(k => esc(k) + '=' + esc(sh.rates[k])).join('&#10;') + '</textarea></label><button class="btn">حفظ الشحن</button></form>' +
+    '<h2 style="margin-top:28px">المنتجات</h2><form class="card" id="pf"><label>اسم المنتج<input class="rtl" name="name" required maxlength="100"></label><label>السعر (جنيه)<input name="price" type="number" min="0" max="10000000" step="0.01" required></label><label>السعر قبل الخصم (اختياري)<input name="old_price" type="number" min="0" step="0.01"></label><label>الكمية المتاحة (فاضي = مفتوحة)<input name="stock" type="number" min="0"></label><label>القسم<input class="rtl" name="category" maxlength="40"></label><label>الوصف<textarea class="rtl" name="description" rows="2" maxlength="500"></textarea></label><label>صورة المنتج (اختياري)<input type="file" name="img" accept="image/jpeg,image/png,image/webp"></label><button class="btn">إضافة المنتج</button></form>' +
     (products.length ? '<div class="tbl"><table><tr><th>المنتج</th><th>السعر</th><th>الحالة</th><th>إجراءات</th></tr>' + products.map(x =>
       '<tr><td>' + esc(x.name) + '</td><td>' + money(x.price) + '</td><td>' + (x.active ? 'ظاهر' : 'مخفي') + '</td><td class="act"><button class="btn sm ghost" data-pt="' + esc(x.id) + '" data-v="' + !x.active + '">' + (x.active ? 'إخفاء' : 'إظهار') + '</button><button class="btn sm warn" data-pd="' + esc(x.id) + '">حذف</button></td></tr>').join('') + '</table></div>' : '<p>لسه مفيش منتجات.</p>') +
     '<h2 style="margin-top:28px">الطلبات</h2>' +
@@ -130,10 +154,16 @@ async function manage(m, id) {
     const f = new FormData(e.target), file = f.get('img');
     try {
       const image_url = file && file.size ? await uploadFile(file, ['image']) : '';
-      done(await sb.from('products').insert({ site_id: id, name: f.get('name').trim(), price: +f.get('price'), description: f.get('description').trim(), image_url }));
+      done(await sb.from('products').insert({ site_id: id, name: f.get('name').trim(), price: +f.get('price'), old_price: f.get('old_price') ? +f.get('old_price') : null, stock: f.get('stock') !== '' ? +f.get('stock') : null, category: f.get('category').trim(), description: f.get('description').trim(), image_url }));
     } catch (er) { msg.textContent = er.message; }
   };
 
+  m.querySelector('#sf').onsubmit = async e => {
+    e.preventDefault(); msg.textContent = '';
+    const f = new FormData(e.target), rates = {};
+    String(f.get('rates')).split('\n').forEach(l => { const [k, v] = l.split('='); const n = parseFloat(v); if (k && GOVS.includes(k.trim()) && n >= 0) rates[k.trim()] = n; });
+    done(await sb.from('sites').update({ shop: { ...(site.shop || {}), ship: { def: Math.max(+f.get('def') || 0, 0), rates } } }).eq('id', id));
+  };
   m.onclick = async e => {
     const t = e.target.closest('[data-pt]'), d = e.target.closest('[data-pd]');
     if (t) done(await sb.from('products').update({ active: t.dataset.v === 'true' }).eq('id', t.dataset.pt));

@@ -125,7 +125,8 @@ async function siteView(slug) {
   if (data.status === 'suspended') { root.innerHTML = '<main class="wrap"><h1>هذا الموقع موقوف</h1><p>تم إيقاف هذا الموقع من إدارة المنصة.</p></main>'; return; }
   document.title = data.name;
   const ph = (data.phone || '').replace(/[^0-9+]/g, '');
-  root.innerHTML = '<div class="site" style="--c:' + esc(safeCol(data.color)) + ';--t:' + (lum(safeCol(data.color)) > 150 ? '#10202B' : '#fff') + '"><header class="s-hero"><h1>' + esc(data.name) + '</h1><p>' + esc(data.description) + '</p>' + (ph ? '<a class="s-btn" href="tel:' + ph + '">اتصل بنا</a>' : '') + '</header><main class="s-body">' +
+  const ST = siteTheme(data.theme);
+  root.innerHTML = '<div class="site' + ST.cls + '" style="--c:' + esc(safeCol(data.color)) + ';--t:' + (lum(safeCol(data.color)) > 150 ? '#10202B' : '#fff') + esc(ST.style) + '"><header class="s-hero"><div class="s-in"><h1>' + esc(data.name) + '</h1><p>' + esc(data.description) + '</p>' + (ph ? '<a class="s-btn" href="tel:' + ph + '">اتصل بنا</a>' : '') + '</div></header><main class="s-body">' +
     (arr(data.content).length ? arr(data.content).map(renderBlock).join('') : (TEMPLATES[data.site_type] || []).map(x => '<section><h2>' + x[0] + '</h2><p>' + x[1] + '</p></section>').join('')) +
     '<div id="shop-box"></div></main><footer class="s-foot">' + (ph ? '<div dir="ltr">' + esc(ph) + '</div>' : '') + '<a href="' + esc(BASE) + '">Powered by ' + esc(C.PLATFORM_NAME) + '</a></footer></div>';
   shopSection(data);
@@ -168,11 +169,11 @@ async function editSite(m, id) {
   if (!me) { location.hash = '#/login'; return; }
   const { data } = await sb.from('sites').select('*').eq('id', id).maybeSingle();
   if (!data || data.owner_id !== me.id) { location.hash = '#/dashboard'; return; }
-  m.innerHTML = '<section class="wrap"><h1>تعديل: ' + esc(data.name) + '</h1><form class="card"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80" value="' + esc(data.name) + '"></label><label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600">' + esc(data.description) + '</textarea></label><label>اللون المفضل<input type="color" name="color" value="' + esc(data.color) + '"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20" value="' + esc(data.phone) + '"></label><label>واتساب (رقم بالكود الدولي من غير + مثل 201001234567)<input name="whatsapp" type="tel" maxlength="15" pattern="[0-9]{8,15}" value="' + esc(data.whatsapp) + '"></label><label>رابط فيسبوك (يبدأ بـ https)<input name="facebook" type="url" maxlength="200" value="' + esc(data.facebook) + '"></label><label>رابط إنستجرام (يبدأ بـ https)<input name="instagram" type="url" maxlength="200" value="' + esc(data.instagram) + '"></label><button class="btn">حفظ التعديلات</button><div class="msg" role="alert"></div></form><p><a href="#/dashboard">الرجوع لمواقعي</a></p></section>';
+  m.innerHTML = '<section class="wrap"><h1>تعديل: ' + esc(data.name) + '</h1><form class="card"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80" value="' + esc(data.name) + '"></label><label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600">' + esc(data.description) + '</textarea></label><label>اللون المفضل<input type="color" name="color" value="' + esc(data.color) + '"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20" value="' + esc(data.phone) + '"></label><label>واتساب (رقم بالكود الدولي من غير + مثل 201001234567)<input name="whatsapp" type="tel" maxlength="15" pattern="[0-9]{8,15}" value="' + esc(data.whatsapp) + '"></label><label>رابط فيسبوك (يبدأ بـ https)<input name="facebook" type="url" maxlength="200" value="' + esc(data.facebook) + '"></label><label>رابط إنستجرام (يبدأ بـ https)<input name="instagram" type="url" maxlength="200" value="' + esc(data.instagram) + '"></label>' + themeFields(data.theme) + '<button class="btn">حفظ التعديلات</button><div class="msg" role="alert"></div></form><p><a href="#/dashboard">الرجوع لمواقعي</a></p></section>';
   m.querySelector('form').onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(e.target), msg = m.querySelector('.msg');
-    const { error } = await sb.from('sites').update({ name: f.get('name').trim(), description: f.get('description').trim(), color: f.get('color'), phone: f.get('phone').trim(), whatsapp: f.get('whatsapp').trim(), facebook: f.get('facebook').trim(), instagram: f.get('instagram').trim() }).eq('id', id);
+    const { error } = await sb.from('sites').update({ name: f.get('name').trim(), description: f.get('description').trim(), color: f.get('color'), phone: f.get('phone').trim(), whatsapp: f.get('whatsapp').trim(), facebook: f.get('facebook').trim(), instagram: f.get('instagram').trim(), theme: readSiteTheme(f) }).eq('id', id);
     if (error) { msg.textContent = error.code === '23514' ? 'تأكد: واتساب أرقام فقط بالكود الدولي، وروابط فيسبوك وإنستجرام تبدأ بـ https://' : siteErr(error); return; }
     location.hash = '#/dashboard';
   };
@@ -299,7 +300,10 @@ const BLOCKS = {
   gallery:{n:'معرض صور', d:() => ({type:'gallery', urls:[]})},
   faq:{n:'أسئلة شائعة', d:() => ({type:'faq', items:[{q:'', a:''}]})},
   reviews:{n:'تقييمات', d:() => ({type:'reviews', items:[{name:'', text:''}]})},
-  map:{n:'خريطة', d:() => ({type:'map', url:''})}
+  map:{n:'خريطة', d:() => ({type:'map', url:''})},
+  announce:{n:'شريط إعلان', d:() => ({type:'announce', text:'عروض مبتنتهيش!', url:''})},
+  trust:{n:'مميزات (ثقة)', d:() => ({type:'trust', items:[{name:'دفع عند الاستلام', text:'نقدي عند وصول الأوردر'}]})},
+  cats:{n:'أقسام المتجر', d:() => ({type:'cats'})}
 };
 const U_HTTPS = /^https:\/\//i, U_LINK = /^(https:\/\/|tel:|mailto:)/i, U_MAP = /^https:\/\/(www\.google\.com|maps\.google\.com)\/maps\/embed/i;
 const okUrl = (u, re) => typeof u === 'string' && re.test(u) ? u : '';
@@ -318,6 +322,9 @@ function renderBlock(b) {
     case 'gallery': return '<div class="b-gal">' + arr(b.urls).map(x => okUrl(x, U_HTTPS) ? '<img src="' + esc(x) + '" alt="" loading="lazy">' : '').join('') + '</div>';
     case 'faq': return '<div class="b-faq">' + arr(b.items).filter(x => x && x.q).map(x => '<details><summary>' + esc(x.q) + '</summary><p>' + nl(x.a) + '</p></details>').join('') + '</div>';
     case 'reviews': return '<div class="b-rev">' + arr(b.items).filter(x => x && x.text).map(x => '<blockquote>' + nl(x.text) + '<cite>' + esc(x.name) + '</cite></blockquote>').join('') + '</div>';
+    case 'announce': u = okUrl(b.url, U_LINK); return b.text ? '<div class="ann">' + (u ? '<a href="' + esc(u) + '" rel="noopener">' + esc(b.text) + '</a>' : esc(b.text)) + '</div>' : '';
+    case 'trust': return '<div class="b-trust">' + arr(b.items).filter(x => x && x.name).map(x => '<div class="tr-c"><b>' + esc(x.name) + '</b><span>' + esc(x.text) + '</span></div>').join('') + '</div>';
+    case 'cats': return '<div class="b-cats"></div>';
     case 'map': u = okUrl(b.url, U_MAP); return u ? '<iframe class="b-map" src="' + esc(u) + '" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>' : '';
   }
   return '';
@@ -356,6 +363,9 @@ async function builder(m, id) {
       case 'gallery': return '<div class="ths">' + arr(b.urls).map((x, j) => '<span><img class="th" src="' + esc(x) + '" alt=""><button type="button" class="btn sm warn" data-gdel="' + j + '" data-i="' + i + '">x</button></span>').join('') + '</div>' + up(i, 'urls', 'image/jpeg,image/png,image/webp', 'image', 'إضافة صور (حتى 12)', true);
       case 'faq': return items(b, i, 'q', 'a', 'السؤال', 'الإجابة');
       case 'reviews': return items(b, i, 'name', 'text', 'اسم العميل', 'نص التقييم');
+      case 'announce': return inp(i, 'text', 'نص الشريط', b.text, false, 'maxlength="120"') + inp(i, 'url', 'رابط (اختياري)', b.url, true);
+      case 'trust': return items(b, i, 'name', 'text', 'العنوان', 'الوصف');
+      case 'cats': return '<p class="hint">بتظهر أقسام المتجر تلقائيًا بصور من منتجاتك.</p>';
       case 'map': return inp(i, 'url', 'رابط الخريطة (قيمة src من Embed a map في Google Maps)', b.url, true);
     }
     return '';
