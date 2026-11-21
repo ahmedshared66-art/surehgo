@@ -1,10 +1,8 @@
 // extras.js — المرحلة 5: إعلانات النسخة المجانية، واتساب وروابط التواصل، وعدّاد الزيارات
-// بيتحمّل قبل app.js، وبيستخدم sb و esc و me و C و okUrl و U_HTTPS من app.js وقت التشغيل.
 
 async function siteExtras(site) {
   const el = document.querySelector('.site'); if (!el) return;
 
-  // عدّاد الزيارات: مرة واحدة لكل جلسة، ومن غير زيارات صاحب الموقع نفسه
   try {
     const k = 'v:' + site.id;
     if (!(me && me.id === site.owner_id) && !sessionStorage.getItem(k)) {
@@ -13,7 +11,6 @@ async function siteExtras(site) {
     }
   } catch {}
 
-  // زر واتساب العائم
   const wa = String(site.whatsapp || '').replace(/[^0-9]/g, '');
   if (wa.length >= 8 && wa.length <= 15) {
     const a = document.createElement('a');
@@ -22,7 +19,6 @@ async function siteExtras(site) {
     el.appendChild(a);
   }
 
-  // روابط فيسبوك وإنستجرام في الفوتر
   const soc = [['فيسبوك', okUrl(site.facebook, U_HTTPS)], ['إنستجرام', okUrl(site.instagram, U_HTTPS)]].filter(x => x[1]);
   const foot = el.querySelector('.s-foot');
   if (soc.length && foot) {
@@ -32,7 +28,6 @@ async function siteExtras(site) {
     foot.insertBefore(d, foot.firstChild);
   }
 
-  // إعلان المنصة على المواقع المجانية
   try {
     const { data } = await sb.rpc('site_shows_ads', { p_site: site.id });
     if (data === true && el.isConnected) {
@@ -44,7 +39,6 @@ async function siteExtras(site) {
   } catch {}
 }
 
-// ====== الذكاء الاصطناعي في المحرر (بيستدعي Edge Function اسمها generate-site) ======
 function aiAsk() {
   return new Promise(res => {
     const d = document.createElement('dialog'); d.className = 'dlg';
@@ -88,7 +82,6 @@ async function aiGenerate(siteId, blocks, st, draw) {
   st('تمت إضافة ' + add.length + ' عنصر. راجعهم واضغط حفظ.');
 }
 
-// ====== الاشتراك: دفع يدوي بفودافون كاش، والتفعيل بيتم من لوحة الأدمن ======
 const planLabel = p => typeof p === 'object' ? p.name : p === 'yearly' ? 'سنوي' : 'شهري';
 const planPrice = p => typeof p === 'object' ? Number(p.price).toLocaleString('ar-EG') + ' جنيه' : p === 'yearly' ? C.PRICE_YEARLY : C.PRICE_MONTHLY;
 
@@ -138,7 +131,6 @@ async function startPay(plan, btn) {
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-// ====== الدومين الخاص: لو الزائر داخل من دومين مربوط بموقع، نعرض الموقع على طول ======
 let _dom;
 async function domainSlug() {
   if (_dom !== undefined) return _dom;

@@ -3,12 +3,6 @@ const sb = supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
 const root = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let me = null, notice = '';
-async function withTimeout(promise, ms, label) {
-  let timer;
-  try {
-    return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(label || 'انتهت مهلة الاتصال')), ms); })]);
-  } finally { clearTimeout(timer); }
-}
 
 const arDays = d => d === 1 ? 'يوم واحد' : d === 2 ? 'يومان' : d <= 10 ? d + ' أيام' : d + ' يوم';
 const daysLeft = d => Math.ceil((new Date(d) - Date.now()) / 864e5);
@@ -22,6 +16,20 @@ const tr = m => {
   if (m.includes('rate limit')) return 'محاولات كتير. استنى دقائق وجرّب تاني.';
   return 'حصلت مشكلة: ' + m;
 };
+
+function setSeo({ title, description, image }) {
+  const t = title || C.PLATFORM_NAME;
+  const d = description || 'منصة surehgo لإنشاء المواقع والمتاجر الإلكترونية بسهولة.';
+  document.title = t;
+  const setMeta = (id, attr, val) => {
+    const el = document.getElementById(id);
+    if (el) el.setAttribute(attr, val);
+  };
+  setMeta('meta-desc', 'content', d);
+  setMeta('og-title', 'content', t);
+  setMeta('og-desc', 'content', d);
+  if (image) setMeta('og-image', 'content', image);
+}
 
 function status(p) {
   if (p.plan === 'trial') {
@@ -48,82 +56,10 @@ function nav() {
   const currentPlan = me && (window.APP_PLANS || []).find(p => p.id === me.subscription_plan_id);
   const remaining = me ? status(me) : null;
   const links = me
-    ? '<a href="#/dashboard">لوحتي</a><a class="notify-link" href="#/notifications" aria-label="الإشعارات"><span aria-hidden="true">🔔</span><span>الإشعارات</span><i data-notify-count' + (window._unreadN ? '' : ' hidden') + '>' + (window._unreadN || '') + '</i></a>' + (me.role === 'super_admin' ? '<a href="#/admin">لوحة الأدمن' + (window._pc ? ' <span class="cnt">' + window._pc + '</span>' : '') + '</a><a href="#/theme">المظهر</a>' : '') + '<button id="logout" class="btn ghost">تسجيل الخروج</button>'
+    ? '<a href="#/dashboard">لوحتي</a>' + (me.role === 'super_admin' ? '<a href="#/admin">لوحة الأدمن' + (window._pc ? ' <span class="cnt">' + window._pc + '</span>' : '') + '</a><a href="#/theme">المظهر</a>' : '') + '<button id="logout" class="btn ghost">تسجيل الخروج</button>'
     : '<a href="#/login">تسجيل الدخول</a><a class="btn" href="#/signup">إنشاء حساب</a>';
   const sub = me ? '<a class="subnav" href="#/subscriptions">الاشتراك <small>' + esc(currentPlan ? currentPlan.name : (me.plan === 'trial' ? 'تجربة مجانية' : planName(me.plan))) + ' · ' + esc(remaining.text) + '</small></a>' : '';
   return '<header class="nav"><div class="nav-main"><a class="brand" href="#/">' + esc(C.PLATFORM_NAME) + '</a>' + sub + '</div><nav>' + links + '</nav></header>';
-}
-
-async function refreshNotificationBell(userId) {
-  if (!userId) return;
-  const { count, error } = await sb.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('read_at', null);
-  if (error) return;
-  window._unreadN = count || 0;
-  document.querySelectorAll('[data-notify-count]').forEach(x => { x.textContent = window._unreadN || ''; x.hidden = !window._unreadN; });
-}
-function startNotificationPolling(userId) {
-  if (window._notificationPoll) clearInterval(window._notificationPoll);
-  if (!userId) return;
-  refreshNotificationBell(userId);
-  window._notificationPoll = setInterval(() => refreshNotificationBell(userId), 12000);
-}
-
-async function notificationsPage(m) {
-  if (!me) { location.hash = '#/login'; return; }
-  const { data, error } = await sb.from('notifications').select('id,title,body,kind,created_at,read_at').eq('user_id', me.id).order('created_at', { ascending: false }).limit(100);
-  if (error) { m.innerHTML = '<section class="wrap"><h1>إشعاراتك</h1><p class="msg">فعّل جدول الإشعارات في Supabase من ملف الإعداد المرفق، ثم حدّث الصفحة.</p></section>'; return; }
-  const rows = data || [];
-  m.innerHTML = '<section class="wrap notification-page"><div class="notification-title"><div><h1>الإشعارات</h1><p class="hint">طلبات واشتراكات وتحديثات حسابك في مكان واحد.</p></div><button type="button" class="btn sm ghost" id="notifications-read-all">تحديد الكل كمقروء</button></div>' + (rows.length ? '<div class="notification-list">' + rows.map(n => '<article class="notification-card' + (n.read_at ? '' : ' unread') + '"><span class="notification-icon">' + (n.kind === 'order' ? '🛍️' : n.kind === 'subscription' ? '✨' : '🔔') + '</span><div><b>' + esc(n.title) + '</b><p>' + esc(n.body) + '</p><small>' + new Date(n.created_at).toLocaleString('ar-EG') + (n.read_at ? '' : ' · جديد') + '</small></div></article>').join('') + '</div>' : '<div class="notification-empty"><b>مفيش إشعارات لسه</b><p>هنعرض هنا أي تحديث يخص حسابك أو طلبات المواقع.</p></div>') + '</section>';
-  m.querySelector('#notifications-read-all')?.addEventListener('click', async () => {
-    const unread = rows.filter(n => !n.read_at).map(n => n.id);
-    if (!unread.length) return;
-    const { error: updateError } = await sb.from('notifications').update({ read_at: new Date().toISOString() }).in('id', unread);
-    if (updateError) { alert('تعذر تحديث الإشعارات: ' + updateError.message); return; }
-    window._unreadN = 0; route();
-  });
-  m.querySelectorAll('.notification-card.unread').forEach(card => card.addEventListener('click', async () => {
-    const idx = [...m.querySelectorAll('.notification-card')].indexOf(card), n = rows[idx];
-    if (!n || n.read_at) return;
-    await sb.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', n.id);
-    window._unreadN = Math.max(0, (window._unreadN || 0) - 1); card.classList.remove('unread');
-  }));
-}
-
-async function siteInbox(m, siteId) {
-  if (!me) { location.hash = '#/login'; return; }
-  const { data: site } = await sb.from('sites').select('id,name,owner_id').eq('id', siteId).maybeSingle();
-  if (!site || (site.owner_id !== me.id && me.role !== 'super_admin')) { location.hash = '#/dashboard'; return; }
-  m.innerHTML = '<section class="wrap inbox-page"><div class="inbox-heading"><div><h1>صندوق الرسائل</h1><p class="hint">رسائل الزوار لموقع ' + esc(site.name) + '</p></div><a class="btn ghost" href="#/dashboard">رجوع لمواقعي</a></div><div class="inbox-layout"><aside class="inbox-threads" id="inbox-threads"><p class="hint">جاري تحميل الرسائل...</p></aside><div class="inbox-chat" id="inbox-chat"><div class="notification-empty">اختار محادثة عشان ترد عليها.</div></div></div></section>';
-  let active = null, rows = [];
-  const threadBox = m.querySelector('#inbox-threads'), chatBox = m.querySelector('#inbox-chat');
-  async function loadInbox() {
-    const { data, error } = await sb.rpc('owner_site_conversations', { p_site: site.id });
-    if (error) { threadBox.innerHTML = '<p class="msg">تعذر تحميل الرسائل. شغّل ملف notifications-and-chat.sql في Supabase.</p>'; return; }
-    rows = data || [];
-    if (!active || !rows.some(x => x.conversation_id === active)) active = rows[0] && rows[0].conversation_id;
-    threadBox.innerHTML = rows.length ? rows.map(x => '<button type="button" class="inbox-thread' + (x.conversation_id === active ? ' active' : '') + '" data-conversation="' + esc(x.conversation_id) + '"><b>' + esc(x.visitor_name) + '</b><small dir="ltr">' + esc(x.visitor_phone) + '</small><span>' + esc(x.last_message) + '</span><time>' + new Date(x.last_message_at).toLocaleString('ar-EG') + '</time></button>').join('') : '<div class="notification-empty"><b>مفيش رسائل لسه</b><p>لما زائر يبعت رسالة من موقعك هتظهر هنا.</p></div>';
-    if (active) await loadThread(); else chatBox.innerHTML = '<div class="notification-empty">مفيش محادثات لسه.</div>';
-  }
-  async function loadThread() {
-    const t = rows.find(x => x.conversation_id === active); if (!t) return;
-    const draft = chatBox.dataset.conversation === active ? (chatBox.querySelector('.inbox-reply textarea')?.value || '') : '';
-    const { data, error } = await sb.rpc('owner_site_messages', { p_conversation: active });
-    if (error) { chatBox.innerHTML = '<p class="msg">تعذر فتح المحادثة.</p>'; return; }
-    chatBox.innerHTML = '<header><div><b>' + esc(t.visitor_name) + '</b><small dir="ltr">' + esc(t.visitor_phone) + '</small></div><a class="btn sm ghost" href="tel:' + esc(String(t.visitor_phone).replace(/[^0-9+]/g,'')) + '">اتصال</a></header><div class="inbox-messages">' + (data || []).map(x => '<div class="chat-bubble ' + (x.sender === 'owner' ? 'from-owner' : 'from-visitor') + '">' + esc(x.body) + '<small>' + new Date(x.created_at).toLocaleString('ar-EG') + '</small></div>').join('') + '</div><form class="inbox-reply"><textarea name="body" rows="2" maxlength="2000" required placeholder="اكتب ردك..."></textarea><button class="btn">إرسال الرد</button></form>';
-    chatBox.dataset.conversation = active; chatBox.querySelector('.inbox-reply textarea').value = draft;
-    chatBox.querySelector('.inbox-reply').onsubmit = async e => {
-      e.preventDefault(); const body = new FormData(e.currentTarget).get('body').trim(); if (!body) return;
-      const btn = e.currentTarget.querySelector('button'); btn.disabled = true;
-      const { error: sendError } = await sb.rpc('owner_site_reply', { p_conversation: active, p_body: body });
-      if (sendError) alert('تعذر إرسال الرد: ' + sendError.message); else await loadInbox();
-      btn.disabled = false;
-    };
-    const feed = chatBox.querySelector('.inbox-messages'); feed.scrollTop = feed.scrollHeight;
-  }
-  threadBox.onclick = e => { const b = e.target.closest('[data-conversation]'); if (!b) return; active = b.dataset.conversation; loadInbox(); };
-  await loadInbox();
-  if (window._inboxPoll) clearInterval(window._inboxPoll);
-  window._inboxPoll = setInterval(() => { if (location.hash.includes('/inbox/')) loadInbox(); }, 9000);
 }
 
 const TYPES = ['مطعم','متجر','شركة','عيادة','مدرسة','موقع شخصي','فندق'];
@@ -155,7 +91,7 @@ function home(m) {
 }
 
 function signup(m) {
-  m.innerHTML = '<section class="wrap"><h1>إنشاء حساب</h1><form class="card"><label>الاسم<input class="rtl" name="name" required maxlength="100" autocomplete="name"></label><label>البريد الإلكتروني<input name="email" type="email" required autocomplete="email"></label><label>رقم الهاتف<input name="phone" type="tel" required maxlength="20" autocomplete="tel"></label><label>كلمة المرور (8 أحرف على الأقل)<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label><span><input type="checkbox" required> أوافق على <a href="#/terms">شروط الاستخدام</a></span></label><button class="btn">ابدأ التجربة المجانية</button><div class="msg" role="alert"></div></form><p>عندك حساب؟ <a href="#/login">سجّل الدخول</a></p></section>';
+  m.innerHTML = '<section class="wrap"><h1>إنشاء حساب</h1><form class="card"><label>الاسم<input class="rtl" name="name" required maxlength="100" autocomplete="name"></label><label>البريد الإلكتروني<input name="email" type="email" required autocomplete="email"></label><label>رقم الهاتف<input name="phone" type="tel" required maxlength="20" autocomplete="tel"></label><label>كلمة المرور (8 أحرف على الأقل)<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label><span><input type="checkbox" required> أوافق على <a href="#/terms">شروط الاستخدام</a> و<a href="#/privacy">سياسة الخصوصية</a></span></label><button class="btn">ابدأ التجربة المجانية</button><div class="msg" role="alert"></div></form><p>عندك حساب؟ <a href="#/login">سجّل الدخول</a></p></section>';
   m.querySelector('form').onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(e.target), msg = m.querySelector('.msg'); msg.className = 'msg'; msg.textContent = '';
@@ -198,40 +134,6 @@ const TEMPLATES = {
   personal:[['نبذة عني','مرحباً بك في موقعي الشخصي.'],['أعمالي','نماذج من أعمالي وخبراتي.'],['تواصل معي','يسعدني التواصل معك.']],
   hotel:[['غرفنا','غرف مريحة بخدمات متكاملة لإقامة هادئة.'],['المرافق','اسأل عن المرافق والخدمات المتاحة.'],['احجز إقامتك','للحجز والاستفسار تواصل معنا مباشرة.']]
 };
-const STARTER_COPY = {
-  restaurant:{lead:'أهلاً بيك في مطعمنا',text:'اكتشف أطباقنا واستمتع بتجربة مميزة.',points:[['طازة كل يوم','نهتم بجودة المكونات والتفاصيل.'],['اختيارات متنوعة','أطباق تناسب أذواق مختلفة.'],['خدمة سريعة','اطلب أو تواصل معنا بسهولة.']],section:'قائمة الطعام'},
-  store:{lead:'اختار اللي يناسبك',text:'تصفح منتجاتنا واكتشف الجديد والعروض المتاحة.',points:[['جودة مضمونة','اختيارات منتقاة بعناية.'],['طلب سهل','اختار منتجاتك وأرسل طلبك مباشرة.'],['توصيل مريح','تواصل معنا لمعرفة مناطق ومواعيد التوصيل.']],section:'تسوق من المتجر'},
-  company:{lead:'حلول تناسب احتياجك',text:'نساعدك بخدمات عملية وخبرة تهتم بتحقيق أفضل نتيجة.',points:[['خبرة متخصصة','فريق يفهم احتياجات مشروعك.'],['حلول واضحة','خدمات مصممة حسب طلبك.'],['تواصل مباشر','اطلب استشارة أو عرض سعر.']],section:'خدماتنا'},
-  clinic:{lead:'رعايتك تبدأ من هنا',text:'نقدم رعاية طبية باهتمام وراحة في كل خطوة.',points:[['رعاية متخصصة','خدمات تناسب احتياجاتك.'],['مواعيد مرنة','تواصل معنا لاختيار الموعد المناسب.'],['اهتمام براحتك','فريق يرافقك من أول زيارة.']],section:'خدماتنا الطبية'},
-  school:{lead:'مستقبل يبدأ بالتعلم',text:'بيئة تعليمية تشجع على المعرفة وتنمية المهارات.',points:[['تعليم متوازن','نهتم بالعلم والمهارات معًا.'],['مراحل متنوعة','تعرف على البرامج والمراحل المتاحة.'],['تواصل مع الإدارة','اسأل عن التقديم والمواعيد.']],section:'البرامج التعليمية'},
-  personal:{lead:'أهلاً بك في مساحتي',text:'هنا أشارك نبذة عن خبراتي وأعمالي وما أقدمه.',points:[['خبرتي','تعرف على مجالات عملي.'],['أعمالي','شاهد نماذج من مشاريعي.'],['تواصل معي','يسعدني استقبال رسالتك.']],section:'نبذة عني'},
-  hotel:{lead:'إقامة مريحة تبدأ هنا',text:'اكتشف مكانًا مناسبًا لإقامة هادئة وخدمة تهتم براحتك.',points:[['غرف مريحة','اختيارات تناسب احتياجات إقامتك.'],['خدمات متكاملة','اسأل عن المرافق والخدمات.'],['حجز سهل','تواصل معنا للاستعلام عن التوافر.']],section:'إقامتك'}
-};
-function starterContent(type, siteName, description, phone) {
-  const x = STARTER_COPY[type] || STARTER_COPY.company, desc = String(description || '').trim();
-  const tel = String(phone || '').replace(/[^0-9+]/g, '');
-  const blocks = [{type:'heading',text:x.lead},{type:'text',text:desc || x.text},{type:'trust',items:x.points.map(([name,text])=>({name,text}))},{type:'heading',text:x.section}];
-  if (type === 'store') blocks.push({type:'cats'},{type:'text',text:'أضف منتجاتك من لوحة إدارة الموقع لتظهر هنا مع الأسعار وإمكانية الطلب.'});
-  else blocks.push({type:'text',text:desc || ('يسعدنا أن تكون ' + String(siteName || '').trim() + ' اختيارك. ' + x.text)});
-  blocks.push({type:'heading',text:'تواصل معنا'},{type:'text',text:tel ? 'اتصل بنا أو راسلنا وسنساعدك.' : 'أضف رقم هاتفك وطرق التواصل من بيانات الموقع.'});
-  if (tel) blocks.push({type:'button',label:'اتصل بنا',url:'tel:' + tel});
-  return blocks;
-}
-const DESIGN_PRESETS = {
-  modern:{id:'modern',name:'مودرن',note:'تصميم نظيف يناسب كل الأنشطة',hero:'grad',skin:'',color:'#0B5C6B'},
-  glass:{id:'glass',name:'زجاجي',note:'واجهة لامعة وناعمة',hero:'glass',skin:'',color:'#6D28D9'},
-  minimal:{id:'minimal',name:'بسيط وأنيق',note:'مساحات هادئة وتركيز على المحتوى',hero:'solid',skin:'',color:'#1F2937'},
-  clan:{id:'clan',name:'كلان دافئ',note:'متجر مريح بألوان دافئة',hero:'solid',skin:'clan',color:'#0B5C6B'},
-  exemore:{id:'exemore',name:'إكسيمور',note:'كتالوج واضح لمتجر كبير',hero:'solid',skin:'exemore',color:'#1D3557'},
-  defacto:{id:'defacto',name:'ديفاكتو',note:'ستايل بسيط لمتاجر الأزياء',hero:'solid',skin:'defacto',color:'#252525'}
-};
-function designGallery(type, selected) {
-  const keys = type === 'store' ? ['clan','exemore','defacto'] : ['modern','glass','minimal'];
-  return '<div class="design-gallery">' + keys.map(k => {
-    const d = DESIGN_PRESETS[k];
-    return '<label class="design-option' + (selected === k ? ' selected' : '') + '"><input type="radio" name="design" value="' + d.id + '"' + (selected === k ? ' checked' : '') + '><span class="design-mini ' + (d.skin ? 'mini-' + d.skin : 'mini-' + d.hero) + '" style="--mini:' + d.color + '"><i class="mini-nav"></i><i class="mini-hero"></i><i class="mini-products"><b></b><b></b><b></b></i></span><b>' + d.name + '</b><small>' + d.note + '</small></label>';
-  }).join('') + '</div>';
-}
 const BASE = (() => { const p = location.pathname, i = p.indexOf('/s/'); return i >= 0 ? p.slice(0, i + 1) : p.replace(/[^/]*$/, ''); })();
 const siteUrl = slug => location.origin + BASE + 's/' + slug;
 const pathSlug = () => { try { const p = decodeURIComponent(location.pathname); return p.startsWith(BASE + 's/') ? p.slice(BASE.length + 2).split('/')[0].toLowerCase() : ''; } catch { return ''; } };
@@ -245,34 +147,32 @@ const siteErr = e => e.code === '23505' ? 'الرابط ده مستخدم. اخ�
   : 'حصلت مشكلة: ' + e.message;
 
 async function siteView(slug) {
-  const { data, error } = await withTimeout(sb.from('sites').select('*').eq('slug', slug).maybeSingle(), 12000, 'الاتصال بقاعدة البيانات تأخر. حدّث الصفحة أو حاول بعد قليل.');
-  if (error) throw error;
-  if (!data) { root.innerHTML = '<main class="wrap"><h1>الموقع غير موجود</h1><p><a href="#/">الرجوع إلى ' + esc(C.PLATFORM_NAME) + '</a></p></main>'; return; }
-  if (data.status === 'suspended') { root.innerHTML = '<main class="wrap"><h1>هذا الموقع موقوف</h1><p>تم إيقاف هذا الموقع من إدارة المنصة.</p></main>'; return; }
-  document.title = data.name;
+  const { data } = await sb.from('sites').select('*').eq('slug', slug).maybeSingle();
+  if (!data) {
+    setSeo({ title: C.PLATFORM_NAME, description: 'الموقع المطلوب غير موجود.' });
+    root.innerHTML = '<main class="wrap"><h1>الموقع غير موجود</h1><p><a href="#/">الرجوع إلى ' + esc(C.PLATFORM_NAME) + '</a></p></main>';
+    return;
+  }
+  if (data.status === 'suspended') {
+    setSeo({ title: data.name + ' | ' + C.PLATFORM_NAME, description: 'تم إيقاف هذا الموقع من إدارة المنصة.' });
+    root.innerHTML = '<main class="wrap"><h1>هذا الموقع موقوف</h1><p>تم إيقاف هذا الموقع من إدارة المنصة.</p></main>';
+    return;
+  }
+  const thObj = (data.theme && typeof data.theme === 'object') ? data.theme : {};
+  const shareImg = okUrl(thObj.banner, U_HTTPS) || okUrl(thObj.logo, U_HTTPS) || okUrl((window.APP_SETTINGS || {}).hero_image, U_HTTPS) || '';
+  setSeo({
+    title: data.name + ' | ' + C.PLATFORM_NAME,
+    description: data.description || ('تصفح ' + data.name + ' على ' + C.PLATFORM_NAME),
+    image: shareImg
+  });
   const ph = (data.phone || '').replace(/[^0-9+]/g, '');
   const ST = siteTheme(data.theme);
-  const liveBlocks = arr(data.content).length ? arr(data.content) : starterContent(data.site_type, data.name, data.description, data.phone);
-  const starter = STARTER_COPY[data.site_type] || STARTER_COPY.company;
-  root.innerHTML = '<div class="site' + ST.cls + '" style="--c:' + esc(safeCol(data.color)) + ';--t:' + (lum(safeCol(data.color)) > 150 ? '#10202B' : '#fff') + esc(ST.style) + '"><header class="s-hero"><div class="s-in">' + ST.logo + '<h1>' + esc(data.name) + '</h1><p>' + esc(data.description || starter.text) + '</p>' + (ph ? '<a class="s-btn" href="tel:' + ph + '">اتصل بنا</a>' : '') + '</div></header><main class="s-body">' +
-    liveBlocks.map(renderBlock).join('') + ST.gallery +
+  root.innerHTML = '<div class="site' + ST.cls + '" style="--c:' + esc(safeCol(data.color)) + ';--t:' + (lum(safeCol(data.color)) > 150 ? '#10202B' : '#fff') + esc(ST.style) + '"><header class="s-hero"><div class="s-in">' + ST.logo + '<h1>' + esc(data.name) + '</h1><p>' + esc(data.description) + '</p>' + (ph ? '<a class="s-btn" href="tel:' + ph + '">اتصل بنا</a>' : '') + '</div></header><main class="s-body">' +
+    (arr(data.content).length ? arr(data.content).map(renderBlock).join('') : (TEMPLATES[data.site_type] || []).map(x => '<section><h2>' + x[0] + '</h2><p>' + x[1] + '</p></section>').join('')) + ST.gallery +
     '<div id="shop-box"></div></main><footer class="s-foot">' + (ph ? '<div dir="ltr">' + esc(ph) + '</div>' : '') + '<a href="' + esc(BASE) + '">Powered by ' + esc(C.PLATFORM_NAME) + '</a></footer></div>';
   shopSection(data);
   siteExtras(data);
   siteEnhance();
-  addOwnerSiteToolbar(data);
-  if (window.initSiteChat) initSiteChat(data);
-}
-
-async function addOwnerSiteToolbar(site) {
-  try {
-    if (!me) await loadMe();
-    if (!me || me.id !== site.owner_id || document.getElementById('site-owner-toolbar')) return;
-    const bar = document.createElement('div'); bar.id = 'site-owner-toolbar'; bar.className = 'site-owner-toolbar';
-    startNotificationPolling(me.id);
-    bar.innerHTML = '<b>أنت بتعاين موقعك</b><span class="grow"></span><a class="owner-bell" href="#/notifications" title="الإشعارات">🔔 <i data-notify-count hidden></i></a><a class="btn sm" href="#/builder/' + esc(site.id) + '">تعديل مباشر</a><a class="btn sm ghost" href="#/inbox/' + esc(site.id) + '">الرسائل</a><a class="btn sm ghost" href="#/edit/' + esc(site.id) + '">الإعدادات</a><a class="btn sm ghost" href="#/manage/' + esc(site.id) + '">إدارة المتجر</a>';
-    root.prepend(bar);
-  } catch {}
 }
 
 async function dashboard(m) {
@@ -296,25 +196,16 @@ async function dashboard(m) {
   }
   const canCreate = s.ok && (siteLimit === -1 || sites.length < siteLimit);
   m.innerHTML = '<section class="wrap"><h1>أهلاً ' + esc(me.full_name) + '</h1><div class="status ' + (s.ok ? 'on' : 'off') + '">' + esc(s.text) + '</div>' + (pend.length ? '<div class="banner pend">طلب الاشتراك' + (pend[0].plan_name || (pend[0].plan ? ' ' + planName(pend[0].plan) : '')) + ' بانتظار تأكيد الأدمن. هيتفعّل بعد مراجعة التحويل.</div>' : '') + '<p><a class="btn" href="#/subscriptions">عرض الاشتراكات وتفاصيل باقتي</a></p>' +
-    '<h2>مواقعي</h2>' + (sites.length ? '<ul class="mysites">' + sites.map(x => '<li><div><b>' + esc(x.name) + '</b> <small>(' + TYPE_NAMES[x.site_type] + (x.status === 'suspended' ? ' - موقوف من الإدارة' : '') + ')</small><br><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(siteUrl(x.slug)) + '</a></div><div class="act"><a class="btn sm" href="#/builder/' + x.id + '">بناء الموقع</a><a class="btn sm ghost" href="#/edit/' + x.id + '">البيانات</a><a class="btn sm ghost" href="#/manage/' + x.id + '">المتجر والطلبات</a><a class="btn sm ghost" href="#/inbox/' + x.id + '">الرسائل</a><button class="btn sm warn" data-del="' + x.id + '">حذف</button></div></li>').join('') + '</ul>' : '<p>لسه معندكش مواقع.</p>') +
-    (canCreate ? '<h2>إنشاء موقع جديد</h2><form class="card" id="nf"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80"></label><label>الرابط (حروف إنجليزية صغيرة وأرقام وشرطة)<input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,29}" maxlength="30" placeholder="my-restaurant"></label><label>نوع النشاط<select name="type">' + Object.keys(TYPE_NAMES).map(k => '<option value="' + k + '">' + TYPE_NAMES[k] + '</option>').join('') + '</select></label><div class="design-pick"><b>اختار تصميم البداية</b><p class="hint">هتقدر تغيّر الصور والأقسام والألوان بعد الإنشاء.</p><div id="design-gallery">' + designGallery('restaurant','modern') + '</div></div>' + (tpls.length ? '<label>أو ابدأ من قالب محفوظ<select name="tpl"><option value="">استخدم التصميم المختار</option>' + tpls.map(t => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join('') + '</select></label>' : '') + '<label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600"></textarea></label><label>اللون المفضل<input type="color" name="color" value="#0B5C6B"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20"></label><button class="btn">إنشاء الموقع</button><div class="msg" role="alert"></div></form>'
+    '<h2>مواقعي</h2>' + (sites.length ? '<ul class="mysites">' + sites.map(x => '<li><div><b>' + esc(x.name) + '</b> <small>(' + TYPE_NAMES[x.site_type] + (x.status === 'suspended' ? ' - موقوف من الإدارة' : '') + ')</small><br><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(siteUrl(x.slug)) + '</a></div><div class="act"><a class="btn sm" href="#/builder/' + x.id + '">بناء الموقع</a><a class="btn sm ghost" href="#/edit/' + x.id + '">البيانات</a><a class="btn sm ghost" href="#/manage/' + x.id + '">المتجر والطلبات</a><button class="btn sm warn" data-del="' + x.id + '">حذف</button></div></li>').join('') + '</ul>' : '<p>لسه معندكش مواقع.</p>') +
+    (canCreate ? '<h2>إنشاء موقع جديد</h2><form class="card" id="nf"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80"></label><label>الرابط (حروف إنجليزية صغيرة وأرقام وشرطة)<input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,29}" maxlength="30" placeholder="my-restaurant"></label><label>نوع النشاط<select name="type">' + Object.keys(TYPE_NAMES).map(k => '<option value="' + k + '">' + TYPE_NAMES[k] + '</option>').join('') + '</select></label>' + (tpls.length ? '<label>ابدأ من قالب جاهز<select name="tpl"><option value="">بدون قالب (موقع فاضي)</option>' + tpls.map(t => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join('') + '</select></label>' : '') + '<label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600"></textarea></label><label>اللون المفضل<input type="color" name="color" value="#0B5C6B"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20"></label><button class="btn">إنشاء الموقع</button><div class="msg" role="alert"></div></form>'
       : '<p class="msg">' + (s.ok ? 'وصلت للحد الأقصى (' + (siteLimit === -1 ? 'غير محدود' : siteLimit) + ' مواقع).' : 'مينفعش تنشئ مواقع جديدة لأن التجربة أو الاشتراك انتهى.') + '</p>') + '</section>';
   const nf = m.querySelector('#nf');
-  if (nf) {
-    const typeField = nf.querySelector('[name="type"]'), gallery = nf.querySelector('#design-gallery');
-    typeField.onchange = () => { gallery.innerHTML = designGallery(typeField.value, typeField.value === 'store' ? 'clan' : 'modern'); };
-    gallery.onchange = e => { if (!e.target.matches('input[name="design"]')) return; gallery.querySelectorAll('.design-option').forEach(x => x.classList.toggle('selected', x.contains(e.target))); };
-  }
   if (nf) nf.onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(nf), msg = nf.querySelector('.msg'); msg.textContent = '';
     const tpl = tpls.find(t => t.id === f.get('tpl'));
-    const siteType = (tpl && tpl.site_type) || f.get('type');
-    const siteDescription = f.get('description').trim() || (tpl && tpl.description) || '';
-    const phone = f.get('phone').trim();
-    const picked = DESIGN_PRESETS[f.get('design')] || DESIGN_PRESETS[siteType === 'store' ? 'clan' : 'modern'];
-    const row = { owner_id: me.id, slug: f.get('slug').trim().toLowerCase(), name: f.get('name').trim(), site_type: siteType, description: siteDescription, color: f.get('color'), phone, content: tpl && arr(tpl.content).length ? arr(tpl.content).slice(0, 40) : starterContent(siteType, f.get('name').trim(), siteDescription, phone), theme: tpl && tpl.theme && typeof tpl.theme === 'object' && Object.keys(tpl.theme).length ? tpl.theme : { hero:picked.hero, skin:picked.skin, anim:true } };
-    if (tpl && /^#[0-9a-f]{6}$/i.test(tpl.color || '')) row.color = tpl.color;
+    const row = { owner_id: me.id, slug: f.get('slug').trim().toLowerCase(), name: f.get('name').trim(), site_type: (tpl && tpl.site_type) || f.get('type'), description: f.get('description').trim() || (tpl && tpl.description) || '', color: f.get('color'), phone: f.get('phone').trim() };
+    if (tpl) { row.content = arr(tpl.content).slice(0, 40); row.theme = tpl.theme && typeof tpl.theme === 'object' ? tpl.theme : {}; if (/^#[0-9a-f]{6}$/i.test(tpl.color || '')) row.color = tpl.color; }
     const { error } = await sb.from('sites').insert(row);
     if (error) { msg.textContent = siteErr(error); return; }
     route();
@@ -372,7 +263,7 @@ async function admin(m) {
     '<label>وصف ومميزات الباقة<textarea class="rtl" name="description" rows="3" maxlength="500" placeholder="اكتب للعميل ما الذي تتضمنه الباقة"></textarea></label>' +
     '<div class="thg"><label>السعر قبل الخصم<input name="original_price" type="number" min="0" step="0.01" value="0" required></label><label>نسبة الخصم %<input name="discount_percent" type="number" min="0" max="100" value="0" required></label><label>السعر بعد الخصم<input name="price" type="number" readonly></label><label>مدة الباقة بالأيام<input name="duration_days" type="number" min="1" max="3650" value="30" required></label>' +
     '<label>عدد المواقع المسموح (-1 = غير محدود)<input name="max_sites" type="number" min="-1" value="1" required></label><label>عدد المنتجات لكل موقع (-1 = غير محدود)<input name="max_products" type="number" min="-1" value="0" required></label></div>' +
-    '<button class="btn">إضافة الباقة</button></form><h2>الباقات الحالية</h2>' + (plans.length ? '<div class="tbl"><table><tr><th>الباقة</th><th>السعر والخصم</th><th>المدة</th><th>حد الاستخدام</th><th>الحالة</th><th></th></tr>' + plans.map(x => '<tr><td><b>' + esc(x.name) + '</b><br><small>' + esc(x.description) + '</small></td><td>' + (x.original_price > x.price ? '<s>' + esc(x.original_price) + '</s> خصم ' + esc(x.discount_percent) + '%<br><b>' + esc(x.price) + ' جنيه</b>' : esc(x.price) + ' جنيه') + '</td><td>' + esc(x.duration_days) + ' يوم</td><td>' + (x.max_sites === -1 ? 'مواقع غير محدودة' : esc(x.max_sites) + ' مواقع') + '<br>' + (x.max_products === -1 ? 'منتجات غير محدودة' : esc(x.max_products) + ' منتجات') + '</td><td>' + (x.active ? 'متاحة' : 'مخفية') + '</td><td><button type="button" class="btn sm" data-a="pedit" data-id="' + esc(x.id) + '">تعديل</button> <button type="button" class="btn sm ghost" data-a="pact" data-id="' + esc(x.id) + '" data-v="' + !x.active + '">' + (x.active ? 'إخفاء' : 'إظهار') + '</button> <button type="button" class="btn sm warn" data-a="pdel" data-id="' + esc(x.id) + '">حذف</button></td></tr>').join('') + '</table></div>' : '<p>لسه مفيش باقات.</p>');
+    '<button class="btn">إضافة الباقة</button></form><h2>الباقات الحالية</h2>' + (plans.length ? '<div class="tbl"><table><tr><th>الباقة</th><th>السعر والخصم</th><th>المدة</th><th>حد الاستخدام</th><th>الحالة</th><th></th></tr>' + plans.map(x => '<tr><td><b>' + esc(x.name) + '</b><br><small>' + esc(x.description) + '</small></td><td>' + (x.original_price > x.price ? '<s>' + esc(x.original_price) + '</s> خصم ' + esc(x.discount_percent) + '%<br><b>' + esc(x.price) + ' جنيه</b>' : esc(x.price) + ' جنيه') + '</td><td>' + esc(x.duration_days) + ' يوم</td><td>' + (x.max_sites === -1 ? 'مواقع غير محدودة' : esc(x.max_sites) + ' مواقع') + '<br>' + (x.max_products === -1 ? 'منتجات غير محدودة' : esc(x.max_products) + ' منتج') + '</td><td>' + (x.active ? 'متاحة' : 'مخفية') + '</td><td><button type="button" class="btn sm" data-a="pedit" data-id="' + esc(x.id) + '">تعديل</button> <button type="button" class="btn sm ghost" data-a="pact" data-id="' + esc(x.id) + '" data-v="' + !x.active + '">' + (x.active ? 'إخفاء' : 'إظهار') + '</button> <button type="button" class="btn sm warn" data-a="pdel" data-id="' + esc(x.id) + '">حذف</button></td></tr>').join('') + '</table></div>' : '<p>لسه مفيش باقات.</p>');
   const assetHtml = '<h2>مكتبة صور المواقع</h2><p class="hint">ارفع الصور مرة واحدة، وهتظهر لصاحب الموقع في قائمة الاختيار داخل البنّاء.</p>' +
     '<form class="card" id="assetf"><label>اسم الصورة<input name="title" required maxlength="100"></label><label>القسم<input name="category" maxlength="50" placeholder="مطاعم، أزياء، خلفيات"></label><label>الصورة<input name="image" type="file" accept="image/jpeg,image/png,image/webp" required></label><button class="btn">رفع وإضافة للمكتبة</button></form>' +
     (lib && lib.error ? '<p class="msg">شغّل ملف SQL الخاص بالمكتبة أولًا.</p>' : assets.length ? '<div class="tbl"><table><tr><th>معاينة</th><th>الاسم</th><th>القسم</th><th>الحالة</th><th>إجراء</th></tr>' + assets.map(x => '<tr><td><img src="' + esc(x.url) + '" alt="" style="width:72px;height:52px;object-fit:cover;border-radius:8px"></td><td>' + esc(x.title) + '</td><td>' + esc(x.category) + '</td><td>' + (x.active ? 'متاحة' : 'مخفية') + '</td><td class="act"><button class="btn sm ghost" data-a="alib" data-id="' + esc(x.id) + '" data-v="' + !x.active + '">' + (x.active ? 'إخفاء' : 'إظهار') + '</button><button class="btn sm warn" data-a="adel" data-id="' + esc(x.id) + '">حذف</button></td></tr>').join('') + '</table></div>' : '<p>مكتبة الصور فاضية.</p>');
@@ -412,10 +303,10 @@ async function admin(m) {
     tabsNav + '<div class="tab" id="t-set" hidden>' + setHtml + '</div><div class="tab" id="t-plans" hidden>' + planHtml + '</div><div class="tab" id="t-assets" hidden>' + assetHtml + '</div><div class="tab" id="t-tpl" hidden>' + tplHtml + '</div><div class="tab" id="t-req" hidden>' + reqHtml + customReqHtml + '</div>' +
     '<div class="tab" id="t-users" hidden><h2>المستخدمين</h2><div class="tbl"><table><tr><th>الاسم</th><th>البريد</th><th>الهاتف</th><th>الباقة</th><th>الحالة</th><th>تاريخ التسجيل</th><th>إجراءات</th></tr>' +
     users.map(x => '<tr><td>' + esc(x.full_name) + '</td><td dir="ltr">' + esc(x.email) + '</td><td dir="ltr">' + esc(x.phone) + '</td><td>' + esc((plans.find(p => p.id === x.subscription_plan_id) || {}).name || planName(x.plan)) + (x.role === 'super_admin' ? ' (أدمن)' : '') + '</td><td>' + esc(status(x).text) + (x.is_disabled ? ' - معطّل' : '') + '</td><td>' + new Date(x.created_at).toLocaleDateString('ar-EG') + '</td><td class="act">' +
-    (x.id === me.id ? '' : '<button class="btn sm ghost" data-a="notify" data-id="' + x.id + '" data-email="' + esc(x.email) + '">إرسال إشعار</button><button class="btn sm ' + (x.is_disabled ? '' : 'warn') + '" data-a="dis" data-id="' + x.id + '" data-v="' + !x.is_disabled + '">' + (x.is_disabled ? 'تفعيل الحساب' : 'تعطيل') + '</button><button class="btn sm warn" data-a="udel" data-id="' + x.id + '" data-email="' + esc(x.email) + '">حذف الحساب</button>') +
+    (x.id === me.id ? '' : '<button class="btn sm ' + (x.is_disabled ? '' : 'warn') + '" data-a="dis" data-id="' + x.id + '" data-v="' + !x.is_disabled + '">' + (x.is_disabled ? 'تفعيل الحساب' : 'تعطيل') + '</button><button class="btn sm warn" data-a="udel" data-id="' + x.id + '" data-email="' + esc(x.email) + '">حذف الحساب</button>') +
     '<button class="btn sm" data-a="assign" data-id="' + x.id + '">إسناد باقة</button>' + (x.subscription_plan_id ? '<button class="btn sm ghost" data-a="renew" data-id="' + x.id + '" data-pid="' + esc(x.subscription_plan_id) + '">تجديد وإضافة أيام</button>' : '') + '<button class="btn sm ghost" data-a="bonus" data-id="' + x.id + '" data-bonus="' + Number(x.site_limit_bonus || 0) + '">زيادة حد المواقع (' + Number(x.site_limit_bonus || 0) + ')</button>' + (x.plan !== 'trial' && x.plan_ends_at && daysLeft(x.plan_ends_at) > 0 ? '<button class="btn sm warn" data-a="cancel" data-id="' + x.id + '">إلغاء الاشتراك</button>' : '') + '<button class="btn sm ghost" data-a="plan" data-id="' + x.id + '" data-p="trial" data-d="' + esc(cfg.trial_days || '3') + '">تجربة +' + esc(cfg.trial_days || '3') + ' أيام</button></td></tr>').join('') + '</table></div>' +
     '</div><div class="tab" id="t-sites" hidden><h2>المواقع</h2><div class="tbl"><table><tr><th>الموقع</th><th>الرابط</th><th>النوع</th><th>صاحب الموقع</th><th>الحالة</th><th>إجراءات</th></tr>' +
-    (sites.length ? sites.map(x => '<tr><td>' + esc(x.name) + '</td><td><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(x.slug) + '</a></td><td>' + TYPE_NAMES[x.site_type] + '</td><td dir="ltr">' + esc(email[x.owner_id] || '') + '</td><td>' + (x.status === 'active' ? 'شغال' : 'موقوف') + '</td><td class="act"><a class="btn sm" href="#/builder/' + esc(x.id) + '">تعديل بالماوس</a><button class="btn sm ' + (x.status === 'active' ? 'warn' : '') + '" data-a="site" data-id="' + x.id + '" data-s="' + (x.status === 'active' ? 'suspended' : 'active') + '">' + (x.status === 'active' ? 'إيقاف' : 'تشغيل') + '</button><button class="btn sm ghost" data-a="move" data-id="' + esc(x.id) + '">نقل الملكية</button><button class="btn sm ghost" data-a="tpl" data-id="' + x.id + '">حفظ كقالب</button><button class="btn sm warn" data-a="sdel" data-id="' + x.id + '">حذف الموقع</button></td></tr>').join('') : '<tr><td colspan="6">مفيش مواقع لسه.</td></tr>') + '</table></div></div></section>';
+    (sites.length ? sites.map(x => '<tr><td>' + esc(x.name) + '</td><td><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(x.slug) + '</a></td><td>' + TYPE_NAMES[x.site_type] + '</td><td dir="ltr">' + esc(email[x.owner_id] || '') + '</td><td>' + (x.status === 'active' ? 'شغال' : 'موقوف') + '</td><td class="act"><a class="btn sm" href="#/builder/' + esc(x.id) + '">تعديل بالماوس</a><button class="btn sm ' + (x.status === 'active' ? 'warn' : '') + '" data-a="site" data-id="' + x.id + '" data-s="' + (x.status === 'active' ? 'suspended' : 'active') + '">' + (x.status === 'active' ? 'إيقاف' : 'تشغيل') + '</button><button class="btn sm ghost" data-a="move" data-id="' + esc(x.id) + '">نقل الملكية</button><button class="btn sm ghost" data-a="tpl" data-id="' + esc(x.id) + '">حفظ كقالب</button><button class="btn sm warn" data-a="sdel" data-id="' + esc(x.id) + '">حذف الموقع</button></td></tr>').join('') : '<tr><td colspan="6">مفيش مواقع لسه.</td></tr>') + '</table></div></div></section>';
   const showTab = t => {
     window._adminTab = t;
     m.querySelectorAll('.tab').forEach(d => d.hidden = d.id !== 't-' + t);
@@ -488,12 +379,7 @@ async function admin(m) {
     const b = e.target.closest('button'); if (!b) return;
     const msg = document.getElementById('amsg'); msg.textContent = '';
     const a = b.dataset.a; let r;
-    if (a === 'notify') {
-      const title = prompt('عنوان الإشعار للعميل ' + b.dataset.email + ':'); if (title === null || !title.trim()) return;
-      const body = prompt('اكتب تفاصيل الإشعار، مثل مبلغ الدفع أو المطلوب من العميل:'); if (body === null || !body.trim()) return;
-      r = await sb.rpc('admin_send_notification', { p_user: b.dataset.id, p_title: title.trim().slice(0, 120), p_body: body.trim().slice(0, 1000) });
-    }
-    else if (a === 'dis') r = await sb.rpc('admin_set_disabled', { target: b.dataset.id, disabled: b.dataset.v === 'true' });
+    if (a === 'dis') r = await sb.rpc('admin_set_disabled', { target: b.dataset.id, disabled: b.dataset.v === 'true' });
     else if (a === 'bonus') {
       const raw = prompt('عدد المواقع الإضافية لهذا الحساب. اكتب -1 لجعله غير محدود:', b.dataset.bonus || '0'); if (raw === null) return;
       const n = Number(raw); if (!Number.isInteger(n) || n < -1) { msg.textContent = 'اكتب صفرًا أو رقمًا موجبًا، أو -1 لغير محدود.'; return; }
@@ -617,20 +503,6 @@ function renderBlock(b) {
 }
 
 const MIME = {'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp', 'video/mp4':'mp4', 'application/pdf':'pdf'};
-const EDITOR_THEMES = [
-  {id:'ocean',name:'محيط هادي',color:'#0B5C6B',bg:'#F5FAFA',ink:'#10202B',hero:'grad',skin:''},
-  {id:'violet',name:'ليلكي عصري',color:'#7047C8',bg:'#FAF8FF',ink:'#21183A',hero:'glass',skin:''},
-  {id:'terra',name:'تيراكوتا دافئ',color:'#C76542',bg:'#FFF8F2',ink:'#352219',hero:'grad',skin:''},
-  {id:'forest',name:'أخضر طبيعي',color:'#28634D',bg:'#F5FAF5',ink:'#17291F',hero:'solid',skin:''},
-  {id:'mono',name:'أسود وأبيض',color:'#202020',bg:'#FFFFFF',ink:'#171717',hero:'solid',skin:''},
-  {id:'clan',name:'متجر كلان',color:'#0B5C6B',bg:'#FFFDF8',ink:'#202A32',hero:'solid',skin:'clan'},
-  {id:'exemore',name:'متجر إكسيمور',color:'#1D3557',bg:'#F7F9FC',ink:'#152033',hero:'solid',skin:'exemore'},
-  {id:'defacto',name:'متجر ديفاكتو',color:'#252525',bg:'#FFFFFF',ink:'#171717',hero:'solid',skin:'defacto'}
-];
-function editorThemeCards(type) {
-  const items = type === 'store' ? EDITOR_THEMES.filter(x => ['clan','exemore','defacto','ocean','mono'].includes(x.id)) : EDITOR_THEMES.filter(x => !x.skin);
-  return items.map(x => '<button type="button" class="theme-choice" data-theme-preset="' + x.id + '" style="--swatch:' + x.color + ';--swatch-bg:' + x.bg + '"><i></i><b>' + x.name + '</b></button>').join('');
-}
 async function uploadFile(file, kinds) {
   if (!MIME[file.type] || !kinds.includes(file.type.split('/')[0])) throw new Error('نوع الملف غير مدعوم هنا.');
   if (file.size > 20 * 1024 * 1024) throw new Error('الملف أكبر من 20 ميجا.');
@@ -647,30 +519,10 @@ async function builder(m, id) {
   const { data: libraryData } = await sb.from('site_asset_library').select('id,title,category,url').eq('active', true).order('created_at', { ascending: false });
   const library = libraryData || [];
   const blocks = arr(data.content).filter(b => b && BLOCKS[b.type]);
-  if (!blocks.length) blocks.push(...starterContent(data.site_type, data.name, data.description, data.phone));
-  m.innerHTML = '<section class="bld live-bld"><aside class="pal"><h3>المظهر والقالب</h3><p class="hint">اختار سِمة، وبعدها غيّر اللون أو البانر وشوف النتيجة فورًا.</p><div class="theme-choices">' + editorThemeCards(data.site_type) + '</div><div class="theme-controls"><label>اللون الأساسي<input id="theme-color" type="color" value="' + esc(data.color || '#0B5C6B') + '"></label><label>خلفية الموقع<input id="theme-bg" type="color" value="' + esc((data.theme && data.theme.bg) || '#FFFFFF') + '"></label><label>لون النص<input id="theme-ink" type="color" value="' + esc((data.theme && data.theme.ink) || '#10202B') + '"></label><label>شكل الواجهة<select id="theme-hero"><option value="solid">ثابت</option><option value="grad">تدرّج</option><option value="glass">زجاجي</option></select></label><label>الخط<select id="theme-font"><option value="">الافتراضي</option>' + fontList(window.APP_SETTINGS).map(f => '<option value="' + esc(f) + '"' + ((data.theme && data.theme.font === f) ? ' selected' : '') + '>' + esc(f) + '</option>').join('') + '</select></label><label>استدارة الحواف<input id="theme-radius" type="range" min="0" max="32" value="' + Number((data.theme && data.theme.radius) ?? 10) + '"></label><label>صورة البانر<input id="theme-banner" type="file" accept="image/jpeg,image/png,image/webp"></label><label>شعار الموقع<input id="theme-logo" type="file" accept="image/jpeg,image/png,image/webp"></label><button type="button" class="btn sm ghost" id="theme-remove-banner"' + ((data.theme && data.theme.banner) ? '' : ' hidden') + '>إزالة البانر</button></div><hr><h3>أقسام الموقع</h3><p class="hint">أضف الأقسام أو اسحبها ورتبها. المعاينة بتتحدث قدامك.</p>' +
+  m.innerHTML = '<section class="bld"><aside class="pal"><h3>العناصر</h3><p class="hint">اسحب العنصر وضعه في الصفحة، أو اضغط عليه.</p>' +
     Object.keys(BLOCKS).map(k => '<button type="button" class="pal-i" draggable="true" data-new="' + k + '">' + BLOCKS[k].n + '</button>').join('') +
-    '</aside><div class="cv"><div class="bar"><b>' + esc(data.name) + '</b><span class="grow"></span><span id="st" role="status"></span><button type="button" class="btn ghost" id="ai">إنشاء بالذكاء الاصطناعي</button><button type="button" class="btn" id="save">حفظ</button><a class="btn ghost" href="' + esc(siteUrl(data.slug)) + '" target="_blank">فتح الموقع</a><a class="btn ghost" href="#/dashboard">رجوع</a></div><div class="builder-grid"><div id="canvas" class="editor-panel"></div><div class="preview-wrap"><div class="preview-head"><b>معاينة مباشرة</b><span class="grow"></span><button type="button" class="btn sm ghost" data-preview="desktop">كمبيوتر</button><button type="button" class="btn sm ghost" data-preview="mobile">موبايل</button></div><div id="preview-window" class="preview-window"><div id="live-preview"></div></div></div></div></div></section>';
-  const cv = m.querySelector('#canvas'), preview = m.querySelector('#live-preview'), previewWindow = m.querySelector('#preview-window'), st = t => m.querySelector('#st').textContent = t;
-  const refreshAppearance = () => {
-    m.querySelector('#theme-color').value = data.color || '#0B5C6B';
-    m.querySelector('#theme-bg').value = (data.theme && data.theme.bg) || '#FFFFFF';
-    m.querySelector('#theme-ink').value = (data.theme && data.theme.ink) || '#10202B';
-    m.querySelector('#theme-hero').value = (data.theme && data.theme.hero) || 'solid';
-    m.querySelector('#theme-font').value = (data.theme && data.theme.font) || '';
-    m.querySelector('#theme-radius').value = Number((data.theme && data.theme.radius) ?? 10);
-    m.querySelector('#theme-remove-banner').hidden = !(data.theme && data.theme.banner);
-  };
-  const updateAppearance = () => { data.theme = data.theme && typeof data.theme === 'object' ? data.theme : {}; data.color = safeCol(data.color); refreshAppearance(); drawPreview(); };
-  const drawPreview = () => {
-    const ST = siteTheme(data.theme), intro = STARTER_COPY[data.site_type] || STARTER_COPY.company;
-    const phone = String(data.phone || '').replace(/[^0-9+]/g, '');
-    const storeHeader = data.site_type === 'store' && ST.cls.includes('sk-') ? '<header class="sh"><div class="sh-top"><div class="sh-logo">' + (ST.logo || esc(data.name)) + '</div><form class="sh-search"><input placeholder="ابحث عن منتج" disabled></form><div class="sh-act"><button class="sh-cart" type="button">🛒 0</button></div></div><nav class="sh-nav"><button type="button">الرئيسية</button><button type="button">الأقسام</button><button type="button">العروض</button></nav></header>' : '';
-    const sampleProducts = data.site_type === 'store' ? '<section class="shop-preview-shelf"><h2>منتجات المتجر</h2><div class="prods"><article class="prod"><div class="preview-product-art art-a"></div><b>منتج مميز</b><p>وصف قصير للمنتج</p><strong>٢٩٩ جنيه</strong></article><article class="prod"><div class="preview-product-art art-b"></div><b>اختيار العملاء</b><p>تفاصيل المنتج هنا</p><strong>٤٥٠ جنيه</strong></article><article class="prod"><div class="preview-product-art art-c"></div><b>وصل حديثًا</b><p>منتجك يظهر للعميل هنا</p><strong>٣٥٠ جنيه</strong></article></div></section>' : '';
-    preview.className = 'site live-site' + ST.cls;
-    preview.style.cssText = '--c:' + safeCol(data.color) + ';--t:' + (lum(safeCol(data.color)) > 150 ? '#10202B' : '#fff') + ST.style;
-    preview.innerHTML = storeHeader + '<header class="s-hero"><div class="s-in">' + ST.logo + '<h1>' + esc(data.name) + '</h1><p>' + esc(data.description || intro.text) + '</p>' + (phone ? '<a class="s-btn" href="tel:' + phone + '">اتصل بنا</a>' : '') + '</div></header><main class="s-body">' + blocks.map((b,i) => '<div class="preview-block" data-preview-index="' + i + '">' + renderBlock(b) + '</div>').join('') + ST.gallery + sampleProducts + '</main><footer class="s-foot">' + (phone ? '<span dir="ltr">' + esc(phone) + '</span>' : '') + '<span>' + esc(data.name) + '</span></footer>';
-  };
+    '</aside><div class="cv"><div class="bar"><b>' + esc(data.name) + '</b><span class="grow"></span><span id="st" role="status"></span><button type="button" class="btn ghost" id="ai">إنشاء بالذكاء الاصطناعي</button><button type="button" class="btn" id="save">حفظ</button><a class="btn ghost" href="' + esc(siteUrl(data.slug)) + '" target="_blank">معاينة</a><a class="btn ghost" href="#/dashboard">رجوع</a></div><div id="canvas"></div></div></section>';
+  const cv = m.querySelector('#canvas'), st = t => m.querySelector('#st').textContent = t;
 
   const inp = (i, f, label, v, ltr, extra) => '<label>' + label + '<input' + (ltr ? ' dir="ltr"' : ' class="rtl"') + ' data-i="' + i + '" data-f="' + f + '" value="' + esc(v) + '" ' + (extra || '') + '></label>';
   const up = (i, f, accept, kinds, label, multi) => '<label>' + label + '<input type="file" accept="' + accept + '"' + (multi ? ' multiple' : '') + ' data-up="' + kinds + '" data-i="' + i + '" data-f="' + f + '"></label>';
@@ -697,30 +549,8 @@ async function builder(m, id) {
   function draw() {
     cv.innerHTML = blocks.map((b, i) => '<div class="blk" data-i="' + i + '"><div class="bh" draggable="true" data-i="' + i + '"><span>⠿ ' + BLOCKS[b.type].n + '</span><span><button type="button" data-m="up" data-i="' + i + '">↑</button><button type="button" data-m="down" data-i="' + i + '">↓</button><button type="button" data-m="del" data-i="' + i + '">حذف</button></span></div>' + fields(b, i) + '</div>').join('') +
       '<div class="drop-end">' + (blocks.length ? 'اسحب هنا للإضافة في آخر الصفحة' : 'ابدأ بسحب عنصر من القائمة وضعه هنا') + '</div>';
-    drawPreview();
   }
-  draw(); refreshAppearance();
-  m.addEventListener('input', e => {
-    const t = e.target; data.theme = data.theme && typeof data.theme === 'object' ? data.theme : {};
-    if (t.id === 'theme-color') data.color = t.value;
-    else if (t.id === 'theme-bg') data.theme.bg = t.value;
-    else if (t.id === 'theme-ink') data.theme.ink = t.value;
-    else if (t.id === 'theme-radius') data.theme.radius = +t.value;
-    else return;
-    drawPreview();
-  });
-  m.addEventListener('change', async e => {
-    const t = e.target; data.theme = data.theme && typeof data.theme === 'object' ? data.theme : {};
-    if (t.id === 'theme-hero') data.theme.hero = t.value;
-    else if (t.id === 'theme-font') data.theme.font = t.value;
-    else if (t.id === 'theme-banner' || t.id === 'theme-logo') {
-      const file = t.files && t.files[0]; if (!file) return;
-      st('جاري رفع الصورة...');
-      try { data.theme[t.id === 'theme-banner' ? 'banner' : 'logo'] = await uploadFile(file, ['image']); st('الصورة جاهزة. اضغط حفظ.'); }
-      catch (er) { st(er.message); return; }
-    } else return;
-    refreshAppearance(); drawPreview();
-  });
+  draw();
   const add = k => { if (blocks.length >= 40) { st('وصلت للحد الأقصى (40 عنصر).'); return; } blocks.push(BLOCKS[k].d()); draw(); };
 
   m.addEventListener('dragstart', e => {
@@ -751,7 +581,6 @@ async function builder(m, id) {
   cv.addEventListener('input', e => {
     const t = e.target, b = blocks[+t.dataset.i]; if (!b || t.dataset.f === undefined) return;
     if (t.dataset.j !== undefined) b[t.dataset.f][+t.dataset.j][t.dataset.k] = t.value; else b[t.dataset.f] = t.value;
-    drawPreview();
   });
   cv.addEventListener('change', async e => {
     const t = e.target;
@@ -775,13 +604,6 @@ async function builder(m, id) {
     } catch (er) { st(er.message); }
   });
   m.addEventListener('click', e => {
-    const pv = e.target.closest('[data-preview]');
-    if (pv) { previewWindow.classList.toggle('mobile-preview', pv.dataset.preview === 'mobile'); return; }
-    const preset = e.target.closest('[data-theme-preset]');
-    if (preset) { const theme = EDITOR_THEMES.find(x => x.id === preset.dataset.themePreset); if (!theme) return; data.theme = { ...(data.theme || {}), bg:theme.bg, ink:theme.ink, hero:theme.hero, skin:theme.skin, radius:12, anim:true }; data.color = theme.color; m.querySelectorAll('.theme-choice').forEach(x => x.classList.toggle('selected', x === preset)); refreshAppearance(); drawPreview(); st('السِمة اتطبقت في المعاينة. اضغط حفظ لما تخلص.'); return; }
-    if (e.target.closest('#theme-remove-banner')) { data.theme = { ...(data.theme || {}), banner:'' }; refreshAppearance(); drawPreview(); st('تمت إزالة صورة البانر من المعاينة. اضغط حفظ.'); return; }
-    const blockPreview = e.target.closest('[data-preview-index]');
-    if (blockPreview) { const editorBlock = cv.querySelector('.blk[data-i="' + blockPreview.dataset.previewIndex + '"]'); if (editorBlock) { editorBlock.scrollIntoView({behavior:'smooth',block:'center'}); editorBlock.classList.add('editing'); setTimeout(() => editorBlock.classList.remove('editing'), 1200); } return; }
     const n = e.target.closest('[data-new]'); if (n) { add(n.dataset.new); return; }
     const b = e.target.closest('button'); if (!b) return;
     const i = +b.dataset.i, mv = b.dataset.m;
@@ -794,7 +616,7 @@ async function builder(m, id) {
     else if (b.id === 'ai') { aiGenerate(id, blocks, st, draw); return; }
     else if (b.id === 'save') {
       st('جاري الحفظ...');
-      sb.from('sites').update({ content: blocks, theme: data.theme, color: data.color }).eq('id', id).then(r => st(r.error ? 'فشل الحفظ: ' + r.error.message : 'تم حفظ الأقسام والمظهر.'));
+      sb.from('sites').update({ content: blocks }).eq('id', id).then(r => st(r.error ? 'فشل الحفظ: ' + r.error.message : 'تم الحفظ.'));
       return;
     } else return;
     draw();
@@ -803,6 +625,10 @@ async function builder(m, id) {
 
 function terms(m) {
   m.innerHTML = '<section class="wrap"><h1>شروط الاستخدام</h1><p>باستخدامك ' + esc(C.PLATFORM_NAME) + ' فأنت توافق على الآتي:</p><ol><li>أنت المسؤول عن محتوى موقعك وصحته، وعن أي صور أو فيديوهات ترفعها.</li><li>يُمنع نشر أي محتوى مخالف للقانون، أو مسيء، أو ينتهك حقوق الآخرين، أو يتضمن احتيالاً.</li><li>من حق إدارة المنصة إيقاف أو حذف أي موقع أو تعطيل أي حساب يخالف هذه الشروط، دون إخطار مسبق.</li><li>التجربة المجانية مدتها 3 أيام، وتعرض إعلانات على المواقع المجانية.</li><li>الاشتراكات المدفوعة غير قابلة للاسترداد إلا بقرار من الإدارة.</li><li>قد نحدّث هذه الشروط، واستمرارك في الاستخدام يعني موافقتك عليها.</li></ol><p><a href="#/">الرجوع للرئيسية</a></p></section>';
+}
+
+function privacy(m) {
+  m.innerHTML = '<section class="wrap"><h1>سياسة الخصوصية</h1><p>توضح هذه السياسة كيفية تعامل منصة ' + esc(C.PLATFORM_NAME) + ' مع البيانات:</p><ol><li><b>بيانات الحساب والمواقع:</b> نجمع الاسم والبريد الإلكتروني ورقم الهاتف وبيانات المواقع والمنتجات والصور المرفوعة لتشغيل الحساب وإدارة الموقع.</li><li><b>بيانات الطلبات والحجوزات:</b> تُستخدم بيانات العملاء (الاسم، الهاتف، العنوان، الموعد، الملاحظات) لإتمام الطلبات والحجوزات وتقديم خدمة المتابعة لصاحب الموقع المعني.</li><li><b>مشاركة البيانات:</b> تظهر بيانات الطلبات والحجوزات لصاحب الموقع صاحب النشاط لإتمام الخدمة، ولا نبيع بيانات العملاء لأطراف ثالثة.</li><li><b>الأمان والاحتفاظ:</b> نعتمد على اتصال مشفر (HTTPS) وصلاحيات وصول مقيدة في قاعدة البيانات لحماية البيانات، ويمكن طلب تعديل أو حذف البيانات عبر التواصل مع الإدارة.</li></ol><p><a href="#/">الرجوع للرئيسية</a></p></section>';
 }
 
 function subscriptionsPage(m) {
@@ -822,7 +648,7 @@ function subscriptionsPage(m) {
   };
 }
 
-const routes = { '/': home, '/login': login, '/signup': signup, '/dashboard': dashboard, '/subscriptions': subscriptionsPage, '/notifications': notificationsPage, '/admin': admin, '/terms': terms, '/theme': themePage };
+const routes = { '/': home, '/login': login, '/signup': signup, '/dashboard': dashboard, '/subscriptions': subscriptionsPage, '/admin': admin, '/terms': terms, '/privacy': privacy, '/theme': themePage };
 
 async function loadSettings() {
   try {
@@ -839,36 +665,25 @@ async function loadSettings() {
 }
 
 async function route() {
-  try {
-  if (window._inboxPoll) { clearInterval(window._inboxPoll); window._inboxPoll = null; }
-  if (window._siteChatPoll) { clearInterval(window._siteChatPoll); window._siteChatPoll = null; }
-  const h = (location.hash.slice(1) || '/').split('?')[0];
-  const ps = pathSlug();
-  // Public customer sites should render without waiting for admin settings or login checks.
-  if (ps && (h === '/' || h === '')) { await siteView(ps); return; }
-  if (h.startsWith('/s/')) { await siteView(decodeURIComponent(h.slice(3)).toLowerCase()); return; }
-  const dom = await domainSlug();
-  if (dom && h === '/') { await siteView(dom); return; }
   await loadSettings();
   await loadMe();
-  startNotificationPolling(me && me.id);
-  window._unreadN = 0;
-  if (me) { try { window._unreadN = (await sb.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', me.id).is('read_at', null)).count || 0; } catch {} }
+  const h = (location.hash.slice(1) || '/').split('?')[0];
+  const dom = await domainSlug();
+  const ps = pathSlug();
+  if (ps && (h === '/' || h === '')) { await siteView(ps); return; }
+  if (dom && h === '/') { await siteView(dom); return; }
   if (/[?&]success=true/.test(location.hash)) notice = 'تم استلام الدفع. اشتراكك بيتفعّل خلال لحظات، حدّث الصفحة لو الحالة ما اتغيرتش.';
   else if (/[?&]success=false/.test(location.hash)) notice = 'عملية الدفع ما اكتملتش. ما اتخصمش منك أي مبلغ، تقدر تجرّب تاني.';
-  document.title = C.PLATFORM_NAME;
+  if (h.startsWith('/s/')) { await siteView(decodeURIComponent(h.slice(3)).toLowerCase()); return; }
+  setSeo({ title: C.PLATFORM_NAME, description: (window.APP_SETTINGS && window.APP_SETTINGS.hero_text) || 'منصة surehgo لإنشاء المواقع والمتاجر الإلكترونية بسهولة.', image: (window.APP_SETTINGS && window.APP_SETTINGS.hero_image) || '' });
   window._pc = 0;
   if (me && me.role === 'super_admin') { try { window._pc = (await sb.from('payment_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending')).count || 0; } catch {} }
-  root.innerHTML = nav() + (notice ? '<div class="banner" role="alert">' + esc(notice) + '</div>' : '') + '<main></main><footer><span>© ' + new Date().getFullYear() + ' ' + esc(C.PLATFORM_NAME) + '</span><a href="#/terms">شروط الاستخدام</a></footer>';
+  root.innerHTML = nav() + (notice ? '<div class="banner" role="alert">' + esc(notice) + '</div>' : '') + '<main></main><footer><span>© ' + new Date().getFullYear() + ' ' + esc(C.PLATFORM_NAME) + '</span><div><a href="#/terms">شروط الاستخدام</a> · <a href="#/privacy">سياسة الخصوصية</a></div></footer>';
   notice = '';
   const main = root.querySelector('main');
-  if (h.startsWith('/inbox/')) await siteInbox(main, h.slice(7)); else if (h.startsWith('/manage/')) await manage(main, h.slice(8)); else if (h.startsWith('/builder/')) await builder(main, h.slice(9)); else if (h.startsWith('/edit/')) await editSite(main, h.slice(6)); else await (routes[h] || home)(main);
+  if (h.startsWith('/manage/')) await manage(main, h.slice(8)); else if (h.startsWith('/builder/')) await builder(main, h.slice(9)); else if (h.startsWith('/edit/')) await editSite(main, h.slice(6)); else await (routes[h] || home)(main);
   const lo = document.getElementById('logout');
   if (lo) lo.onclick = async () => { await sb.auth.signOut(); location.hash = '#/'; route(); };
-  } catch (err) {
-    console.error('Surehgo page render failed:', err);
-    root.innerHTML = '<main class="wrap" style="padding:48px 20px"><h1>تعذر عرض الموقع</h1><p>حصل خطأ أثناء تحميل الصفحة. حدّثها، ولو استمرت المشكلة ابعت نص الخطأ للدعم.</p><details><summary>تفاصيل الخطأ</summary><pre dir="ltr" style="white-space:pre-wrap">' + esc(err && (err.stack || err.message) || err) + '</pre></details></main>';
-  }
 }
 sb.auth.onAuthStateChange(async ev => {
   if (ev !== 'PASSWORD_RECOVERY') return;
