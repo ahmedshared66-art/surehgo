@@ -3,6 +3,12 @@ const sb = supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
 const root = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let me = null, notice = '';
+async function withTimeout(promise, ms, label) {
+  let timer;
+  try {
+    return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(label || 'انتهت مهلة الاتصال')), ms); })]);
+  } finally { clearTimeout(timer); }
+}
 
 const arDays = d => d === 1 ? 'يوم واحد' : d === 2 ? 'يومان' : d <= 10 ? d + ' أيام' : d + ' يوم';
 const daysLeft = d => Math.ceil((new Date(d) - Date.now()) / 864e5);
@@ -152,7 +158,8 @@ const siteErr = e => e.code === '23505' ? 'الرابط ده مستخدم. اخ�
   : 'حصلت مشكلة: ' + e.message;
 
 async function siteView(slug) {
-  const { data } = await sb.from('sites').select('*').eq('slug', slug).maybeSingle();
+  const { data, error } = await withTimeout(sb.from('sites').select('*').eq('slug', slug).maybeSingle(), 12000, 'الاتصال بقاعدة البيانات تأخر. حدّث الصفحة أو حاول بعد قليل.');
+  if (error) throw error;
   if (!data) { root.innerHTML = '<main class="wrap"><h1>الموقع غير موجود</h1><p><a href="#/">الرجوع إلى ' + esc(C.PLATFORM_NAME) + '</a></p></main>'; return; }
   if (data.status === 'suspended') { root.innerHTML = '<main class="wrap"><h1>هذا الموقع موقوف</h1><p>تم إيقاف هذا الموقع من إدارة المنصة.</p></main>'; return; }
   document.title = data.name;
@@ -659,16 +666,17 @@ async function loadSettings() {
 
 async function route() {
   try {
+  const h = (location.hash.slice(1) || '/').split('?')[0];
+  const ps = pathSlug();
+  // Public customer sites should render without waiting for admin settings or login checks.
+  if (ps && (h === '/' || h === '')) { await siteView(ps); return; }
+  if (h.startsWith('/s/')) { await siteView(decodeURIComponent(h.slice(3)).toLowerCase()); return; }
+  const dom = await domainSlug();
+  if (dom && h === '/') { await siteView(dom); return; }
   await loadSettings();
   await loadMe();
-  const h = (location.hash.slice(1) || '/').split('?')[0];
-  const dom = await domainSlug();
-  const ps = pathSlug();
-  if (ps && (h === '/' || h === '')) { await siteView(ps); return; }
-  if (dom && h === '/') { await siteView(dom); return; }
   if (/[?&]success=true/.test(location.hash)) notice = 'تم استلام الدفع. اشتراكك بيتفعّل خلال لحظات، حدّث الصفحة لو الحالة ما اتغيرتش.';
   else if (/[?&]success=false/.test(location.hash)) notice = 'عملية الدفع ما اكتملتش. ما اتخصمش منك أي مبلغ، تقدر تجرّب تاني.';
-  if (h.startsWith('/s/')) { await siteView(decodeURIComponent(h.slice(3)).toLowerCase()); return; }
   document.title = C.PLATFORM_NAME;
   window._pc = 0;
   if (me && me.role === 'super_admin') { try { window._pc = (await sb.from('payment_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending')).count || 0; } catch {} }
