@@ -94,6 +94,7 @@ function themeFields(t) {
     '<label>استدارة الحواف<input type="range" name="t_radius" min="0" max="32" value="' + (r >= 0 ? r : 8) + '"></label>' +
     '<label>شكل الهيرو<select name="t_hero">' + sel(t.hero || 'solid', [['solid', 'لون ثابت'], ['grad', 'تدرّج'], ['glass', 'زجاجي (تمويه)']]) + '</select></label>' +
     '<label>شكل المتجر (قالب)<select name="t_skin">' + sel(t.skin || '', [['', 'عادي'], ['clan', 'كلان (دافئ)'], ['exemore', 'إكسيمور (متجر كبير)'], ['defacto', 'ديفاكتو (أزياء بسيط)']]) + '</select></label><label>لوجو الموقع<input type="file" name="t_logofile" accept="image/jpeg,image/png,image/webp"></label><label>صورة البانر (الخلفية)<input type="file" name="t_bannerfile" accept="image/jpeg,image/png,image/webp"></label>' +
+    '<div><b>صور إضافية للموقع</b><p class="hint">اسحب الصور في البنّاء لترتيبها بين أقسام الصفحة. الحد الأقصى 12 صورة.</p><div class="ths">' + arr(t.gallery).map(u => '<span><img class="th" src="' + esc(u) + '" alt=""><label class="chk"><input type="checkbox" name="t_gallery_remove" value="' + esc(u) + '"> إزالة</label></span>').join('') + '</div><label>إضافة صور للموقع<input type="file" name="t_galleryfiles" accept="image/jpeg,image/png,image/webp" multiple></label></div>' +
     '<label class="chk"><input type="checkbox" name="t_anim"' + (t.anim ? ' checked' : '') + '> حركة ظهور ناعمة</label></div>';
 }
 const readSiteTheme = f => ({ bg: f.get('t_bg'), ink: f.get('t_ink'), font: f.get('t_font') || '', radius: +f.get('t_radius'), hero: f.get('t_hero'), skin: f.get('t_skin') || '', anim: f.get('t_anim') === 'on' });
@@ -108,7 +109,9 @@ function siteTheme(t) {
   const su = u => /^https:\/\/[^\s"'()<>\\]+$/i.test(u || '') ? u : '';
   const bn = su(t.banner), lg = su(t.logo);
   if (bn) s += ';--bn:url("' + bn + '")';
-  return { style: s, logo: lg ? '<img class="s-logo" src="' + lg + '" alt="">' : '', cls: (t.hero === 'grad' || t.hero === 'glass' ? ' h-' + t.hero : '') + (t.anim === true ? ' anim' : '') + (['clan', 'exemore', 'defacto'].includes(t.skin) ? ' sk-' + t.skin : '') + (bn ? ' has-bn' : '') };
+  const photos = arr(t.gallery).filter(u => su(u)).slice(0, 12);
+  const gallery = photos.length ? '<div class="theme-gallery">' + photos.map(u => '<img src="' + esc(u) + '" alt="" loading="lazy">').join('') + '</div>' : '';
+  return { style: s, logo: lg ? '<img class="s-logo" src="' + lg + '" alt="">' : '', gallery, cls: (t.hero === 'grad' || t.hero === 'glass' ? ' h-' + t.hero : '') + (t.anim === true ? ' anim' : '') + (['clan', 'exemore', 'defacto'].includes(t.skin) ? ' sk-' + t.skin : '') + (bn ? ' has-bn' : '') };
 }
 
 // قراءة مظهر الموقع مع رفع اللوجو والبانر لو العميل اختار صور جديدة
@@ -118,6 +121,12 @@ async function siteThemeFrom(f, old) {
     th[k] = old[k] || '';
     const file = f.get(field);
     if (file && file.size) { try { th[k] = await uploadFile(file, ['image']); } catch (er) { alert(er.message); } }
+  }
+  const removed = new Set(f.getAll('t_gallery_remove'));
+  th.gallery = arr(old.gallery).filter(u => !removed.has(u)).slice(0, 12);
+  for (const file of f.getAll('t_galleryfiles')) {
+    if (!file || !file.size || th.gallery.length >= 12) continue;
+    try { th.gallery.push(await uploadFile(file, ['image'])); } catch (er) { alert(er.message); }
   }
   return th;
 }

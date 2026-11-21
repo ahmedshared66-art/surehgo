@@ -94,7 +94,7 @@ const planPrice = p => typeof p === 'object' ? Number(p.price).toLocaleString('a
 
 const payHtml = () => {
   const plans = Array.isArray(window.APP_PLANS) ? window.APP_PLANS : [];
-  const choices = plans.length ? plans.map(p => '<article class="plan-card"><h3>' + esc(p.name) + '</h3><p>' + esc(p.description) + '</p><b>' + esc(planPrice(p)) + '</b><small>لمدة ' + esc(p.duration_days) + ' يوم · ' + (p.max_sites === -1 ? 'مواقع غير محدودة' : esc(p.max_sites) + ' مواقع') + ' · ' + (p.max_products === -1 ? 'منتجات غير محدودة' : esc(p.max_products) + ' منتج') + '</small><button type="button" class="btn" data-pay="' + esc(p.id) + '">اختيار الباقة</button></article>').join('') :
+  const choices = plans.length ? plans.map(p => '<article class="plan-card">' + (p.discount_percent > 0 ? '<span class="discount">خصم ' + esc(p.discount_percent) + '%</span>' : '') + '<h3>' + esc(p.name) + '</h3><p>' + esc(p.description) + '</p><b>' + (p.original_price > p.price ? '<s>' + esc(p.original_price) + ' جنيه</s> ' : '') + esc(planPrice(p)) + '</b><small>لمدة ' + esc(p.duration_days) + ' يوم · ' + (p.max_sites === -1 ? 'مواقع غير محدودة' : esc(p.max_sites) + ' مواقع') + ' · ' + (p.max_products === -1 ? 'منتجات غير محدودة' : esc(p.max_products) + ' منتج') + '</small><button type="button" class="btn" data-pay="' + esc(p.id) + '">اختيار الباقة</button></article>').join('') :
     '<button type="button" class="btn" data-pay="monthly">اشترك شهري: ' + esc(C.PRICE_MONTHLY) + '</button> <button type="button" class="btn" data-pay="yearly">اشترك سنوي: ' + esc(C.PRICE_YEARLY) + '</button>';
   return '<h2>اختار اشتراكك</h2><div class="plan-choices">' + choices + '</div><div id="pay-info"></div>';
 };

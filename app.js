@@ -37,10 +37,13 @@ async function loadMe() {
 }
 
 function nav() {
+  const currentPlan = me && (window.APP_PLANS || []).find(p => p.id === me.subscription_plan_id);
+  const remaining = me ? status(me) : null;
   const links = me
     ? '<a href="#/dashboard">لوحتي</a>' + (me.role === 'super_admin' ? '<a href="#/admin">لوحة الأدمن' + (window._pc ? ' <span class="cnt">' + window._pc + '</span>' : '') + '</a><a href="#/theme">المظهر</a>' : '') + '<button id="logout" class="btn ghost">تسجيل الخروج</button>'
     : '<a href="#/login">تسجيل الدخول</a><a class="btn" href="#/signup">إنشاء حساب</a>';
-  return '<header class="nav"><a class="brand" href="#/">' + esc(C.PLATFORM_NAME) + '</a><nav>' + links + '</nav></header>';
+  const sub = me ? '<a class="subnav" href="#/subscriptions">الاشتراك <small>' + esc(currentPlan ? currentPlan.name : (me.plan === 'trial' ? 'تجربة مجانية' : planName(me.plan))) + ' · ' + esc(remaining.text) + '</small></a>' : '';
+  return '<header class="nav"><div class="nav-main"><a class="brand" href="#/">' + esc(C.PLATFORM_NAME) + '</a>' + sub + '</div><nav>' + links + '</nav></header>';
 }
 
 const TYPES = ['مطعم','متجر','شركة','عيادة','مدرسة','موقع شخصي','فندق'];
@@ -55,7 +58,7 @@ const FEATURES = [
 
 function home(m) {
   const catalog = Array.isArray(window.APP_PLANS) ? window.APP_PLANS.filter(p => p.active) : [];
-  const planRows = catalog.length ? catalog.map(p => '<tr><td><b>' + esc(p.name) + '</b><br><small>' + esc(p.description) + '</small></td><td>' + esc(p.price) + ' جنيه</td><td>' + esc(p.duration_days) + ' يوم</td><td>' + (p.max_sites === -1 ? 'مواقع غير محدودة' : esc(p.max_sites) + ' مواقع') + '<br>' + (p.max_products === -1 ? 'منتجات غير محدودة' : esc(p.max_products) + ' منتج') + '</td></tr>').join('') :
+  const planRows = catalog.length ? catalog.map(p => '<tr><td><b>' + esc(p.name) + '</b><br><small>' + esc(p.description) + '</small></td><td>' + (p.original_price > p.price ? '<s>' + esc(p.original_price) + '</s> <b>' + esc(p.price) + ' جنيه</b> <span class="discount">خصم ' + esc(p.discount_percent) + '%</span>' : esc(p.price) + ' جنيه') + '</td><td>' + esc(p.duration_days) + ' يوم</td><td>' + (p.max_sites === -1 ? 'مواقع غير محدودة' : esc(p.max_sites) + ' مواقع') + '<br>' + (p.max_products === -1 ? 'منتجات غير محدودة' : esc(p.max_products) + ' منتج') + '</td></tr>').join('') :
     '<tr><td><b>الشهرية</b></td><td>' + esc(C.PRICE_MONTHLY) + '</td><td>30 يوم</td><td>حسب الباقة</td></tr><tr><td><b>السنوية</b></td><td>' + esc(C.PRICE_YEARLY) + '</td><td>365 يوم</td><td>حسب الباقة</td></tr>';
   m.innerHTML =
   '<section class="hero"><div><span class="badge">3 أيام مجاناً</span><h1>' + esc((window.APP_SETTINGS || {}).hero_title || 'موقعك على الإنترنت في دقائق') + '</h1><p>' + esc((window.APP_SETTINGS || {}).hero_text || 'اختار نوع نشاطك، وابني موقعك بالسحب والإفلات أو بالذكاء الاصطناعي. من غير برمجة.') + '</p><a class="btn" href="' + (me ? '#/dashboard' : '#/signup') + '">إنشاء موقع</a></div>' +
@@ -130,7 +133,7 @@ async function siteView(slug) {
   const ph = (data.phone || '').replace(/[^0-9+]/g, '');
   const ST = siteTheme(data.theme);
   root.innerHTML = '<div class="site' + ST.cls + '" style="--c:' + esc(safeCol(data.color)) + ';--t:' + (lum(safeCol(data.color)) > 150 ? '#10202B' : '#fff') + esc(ST.style) + '"><header class="s-hero"><div class="s-in">' + ST.logo + '<h1>' + esc(data.name) + '</h1><p>' + esc(data.description) + '</p>' + (ph ? '<a class="s-btn" href="tel:' + ph + '">اتصل بنا</a>' : '') + '</div></header><main class="s-body">' +
-    (arr(data.content).length ? arr(data.content).map(renderBlock).join('') : (TEMPLATES[data.site_type] || []).map(x => '<section><h2>' + x[0] + '</h2><p>' + x[1] + '</p></section>').join('')) +
+    (arr(data.content).length ? arr(data.content).map(renderBlock).join('') : (TEMPLATES[data.site_type] || []).map(x => '<section><h2>' + x[0] + '</h2><p>' + x[1] + '</p></section>').join('')) + ST.gallery +
     '<div id="shop-box"></div></main><footer class="s-foot">' + (ph ? '<div dir="ltr">' + esc(ph) + '</div>' : '') + '<a href="' + esc(BASE) + '">Powered by ' + esc(C.PLATFORM_NAME) + '</a></footer></div>';
   shopSection(data);
   siteExtras(data);
@@ -154,7 +157,7 @@ async function dashboard(m) {
     try { pend = pend.concat((await sb.from('subscription_plan_requests').select('plan_name').eq('status', 'pending')).data || []); } catch {}
   }
   const canCreate = s.ok && (siteLimit === -1 || sites.length < siteLimit);
-  m.innerHTML = '<section class="wrap"><h1>أهلاً ' + esc(me.full_name) + '</h1><div class="status ' + (s.ok ? 'on' : 'off') + '">' + esc(s.text) + '</div>' + (pend.length ? '<div class="banner pend">طلب الاشتراك' + (pend[0].plan_name || (pend[0].plan ? ' ' + planName(pend[0].plan) : '')) + ' بانتظار تأكيد الأدمن. هيتفعّل بعد مراجعة التحويل.</div>' : '') + payHtml() +
+  m.innerHTML = '<section class="wrap"><h1>أهلاً ' + esc(me.full_name) + '</h1><div class="status ' + (s.ok ? 'on' : 'off') + '">' + esc(s.text) + '</div>' + (pend.length ? '<div class="banner pend">طلب الاشتراك' + (pend[0].plan_name || (pend[0].plan ? ' ' + planName(pend[0].plan) : '')) + ' بانتظار تأكيد الأدمن. هيتفعّل بعد مراجعة التحويل.</div>' : '') + '<p><a class="btn" href="#/subscriptions">عرض الاشتراكات وتفاصيل باقتي</a></p>' +
     '<h2>مواقعي</h2>' + (sites.length ? '<ul class="mysites">' + sites.map(x => '<li><div><b>' + esc(x.name) + '</b> <small>(' + TYPE_NAMES[x.site_type] + (x.status === 'suspended' ? ' - موقوف من الإدارة' : '') + ')</small><br><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(siteUrl(x.slug)) + '</a></div><div class="act"><a class="btn sm" href="#/builder/' + x.id + '">بناء الموقع</a><a class="btn sm ghost" href="#/edit/' + x.id + '">البيانات</a><a class="btn sm ghost" href="#/manage/' + x.id + '">المتجر والطلبات</a><button class="btn sm warn" data-del="' + x.id + '">حذف</button></div></li>').join('') + '</ul>' : '<p>لسه معندكش مواقع.</p>') +
     (canCreate ? '<h2>إنشاء موقع جديد</h2><form class="card" id="nf"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80"></label><label>الرابط (حروف إنجليزية صغيرة وأرقام وشرطة)<input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,29}" maxlength="30" placeholder="my-restaurant"></label><label>نوع النشاط<select name="type">' + Object.keys(TYPE_NAMES).map(k => '<option value="' + k + '">' + TYPE_NAMES[k] + '</option>').join('') + '</select></label>' + (tpls.length ? '<label>ابدأ من قالب جاهز<select name="tpl"><option value="">بدون قالب (موقع فاضي)</option>' + tpls.map(t => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join('') + '</select></label>' : '') + '<label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600"></textarea></label><label>اللون المفضل<input type="color" name="color" value="#0B5C6B"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20"></label><button class="btn">إنشاء الموقع</button><div class="msg" role="alert"></div></form>'
       : '<p class="msg">' + (s.ok ? 'وصلت للحد الأقصى (' + (siteLimit === -1 ? 'غير محدود' : siteLimit) + ' مواقع).' : 'مينفعش تنشئ مواقع جديدة لأن التجربة أو الاشتراك انتهى.') + '</p>') + '</section>';
@@ -220,9 +223,9 @@ async function admin(m) {
     '<form class="card" id="planf"><label>اسم الباقة<input name="name" required maxlength="80" placeholder="مثال: باقة المتجر"></label>' +
     '<label>كود داخلي (إنجليزي وأرقام وشرطة)<input name="code" required pattern="[a-z0-9][a-z0-9-]{1,39}" maxlength="40" placeholder="store-pro"></label>' +
     '<label>وصف ومميزات الباقة<textarea class="rtl" name="description" rows="3" maxlength="500" placeholder="اكتب للعميل ما الذي تتضمنه الباقة"></textarea></label>' +
-    '<div class="thg"><label>السعر بالجنيه<input name="price" type="number" min="0" step="0.01" required></label><label>مدة الباقة بالأيام<input name="duration_days" type="number" min="1" max="3650" value="30" required></label>' +
+    '<div class="thg"><label>السعر قبل الخصم<input name="original_price" type="number" min="0" step="0.01" value="0" required></label><label>نسبة الخصم %<input name="discount_percent" type="number" min="0" max="100" value="0" required></label><label>السعر بعد الخصم<input name="price" type="number" readonly></label><label>مدة الباقة بالأيام<input name="duration_days" type="number" min="1" max="3650" value="30" required></label>' +
     '<label>عدد المواقع المسموح (-1 = غير محدود)<input name="max_sites" type="number" min="-1" value="1" required></label><label>عدد المنتجات لكل موقع (-1 = غير محدود)<input name="max_products" type="number" min="-1" value="0" required></label></div>' +
-    '<button class="btn">إضافة الباقة</button></form><h2>الباقات الحالية</h2>' + (plans.length ? '<div class="tbl"><table><tr><th>الباقة</th><th>السعر</th><th>المدة</th><th>حد الاستخدام</th><th>الحالة</th><th></th></tr>' + plans.map(x => '<tr><td><b>' + esc(x.name) + '</b><br><small>' + esc(x.description) + '</small></td><td>' + esc(x.price) + ' جنيه</td><td>' + esc(x.duration_days) + ' يوم</td><td>' + (x.max_sites === -1 ? 'مواقع غير محدودة' : esc(x.max_sites) + ' مواقع') + '<br>' + (x.max_products === -1 ? 'منتجات غير محدودة' : esc(x.max_products) + ' منتجات') + '</td><td>' + (x.active ? 'متاحة' : 'مخفية') + '</td><td><button type="button" class="btn sm" data-a="pedit" data-id="' + esc(x.id) + '">تعديل</button> <button type="button" class="btn sm ghost" data-a="pact" data-id="' + esc(x.id) + '" data-v="' + !x.active + '">' + (x.active ? 'إخفاء' : 'إظهار') + '</button> <button type="button" class="btn sm warn" data-a="pdel" data-id="' + esc(x.id) + '">حذف</button></td></tr>').join('') + '</table></div>' : '<p>لسه مفيش باقات.</p>');
+    '<button class="btn">إضافة الباقة</button></form><h2>الباقات الحالية</h2>' + (plans.length ? '<div class="tbl"><table><tr><th>الباقة</th><th>السعر والخصم</th><th>المدة</th><th>حد الاستخدام</th><th>الحالة</th><th></th></tr>' + plans.map(x => '<tr><td><b>' + esc(x.name) + '</b><br><small>' + esc(x.description) + '</small></td><td>' + (x.original_price > x.price ? '<s>' + esc(x.original_price) + '</s> خصم ' + esc(x.discount_percent) + '%<br><b>' + esc(x.price) + ' جنيه</b>' : esc(x.price) + ' جنيه') + '</td><td>' + esc(x.duration_days) + ' يوم</td><td>' + (x.max_sites === -1 ? 'مواقع غير محدودة' : esc(x.max_sites) + ' مواقع') + '<br>' + (x.max_products === -1 ? 'منتجات غير محدودة' : esc(x.max_products) + ' منتجات') + '</td><td>' + (x.active ? 'متاحة' : 'مخفية') + '</td><td><button type="button" class="btn sm" data-a="pedit" data-id="' + esc(x.id) + '">تعديل</button> <button type="button" class="btn sm ghost" data-a="pact" data-id="' + esc(x.id) + '" data-v="' + !x.active + '">' + (x.active ? 'إخفاء' : 'إظهار') + '</button> <button type="button" class="btn sm warn" data-a="pdel" data-id="' + esc(x.id) + '">حذف</button></td></tr>').join('') + '</table></div>' : '<p>لسه مفيش باقات.</p>');
   const assetHtml = '<h2>مكتبة صور المواقع</h2><p class="hint">ارفع الصور مرة واحدة، وهتظهر لصاحب الموقع في قائمة الاختيار داخل البنّاء.</p>' +
     '<form class="card" id="assetf"><label>اسم الصورة<input name="title" required maxlength="100"></label><label>القسم<input name="category" maxlength="50" placeholder="مطاعم، أزياء، خلفيات"></label><label>الصورة<input name="image" type="file" accept="image/jpeg,image/png,image/webp" required></label><button class="btn">رفع وإضافة للمكتبة</button></form>' +
     (lib && lib.error ? '<p class="msg">شغّل ملف SQL الخاص بالمكتبة أولًا.</p>' : assets.length ? '<div class="tbl"><table><tr><th>معاينة</th><th>الاسم</th><th>القسم</th><th>الحالة</th><th>إجراء</th></tr>' + assets.map(x => '<tr><td><img src="' + esc(x.url) + '" alt="" style="width:72px;height:52px;object-fit:cover;border-radius:8px"></td><td>' + esc(x.title) + '</td><td>' + esc(x.category) + '</td><td>' + (x.active ? 'متاحة' : 'مخفية') + '</td><td class="act"><button class="btn sm ghost" data-a="alib" data-id="' + esc(x.id) + '" data-v="' + !x.active + '">' + (x.active ? 'إخفاء' : 'إظهار') + '</button><button class="btn sm warn" data-a="adel" data-id="' + esc(x.id) + '">حذف</button></td></tr>').join('') + '</table></div>' : '<p>مكتبة الصور فاضية.</p>');
@@ -289,9 +292,13 @@ async function admin(m) {
     route();
   };
   const pf = m.querySelector('#planf');
+  if (pf) {
+    const recalcPrice = () => { const base = Math.max(+pf.elements.original_price.value || 0, 0), pct = Math.min(Math.max(+pf.elements.discount_percent.value || 0, 0), 100); pf.elements.price.value = (base * (1 - pct / 100)).toFixed(2); };
+    pf.addEventListener('input', recalcPrice); recalcPrice();
+  }
   if (pf) pf.onsubmit = async e => {
     e.preventDefault(); const f = new FormData(pf), msg = document.getElementById('amsg');
-    const row = { name: String(f.get('name')).trim(), code: String(f.get('code')).trim().toLowerCase(), description: String(f.get('description')).trim(), price: +f.get('price'), duration_days: +f.get('duration_days'), max_sites: +f.get('max_sites'), max_products: +f.get('max_products'), features: [], active: true, sort_order: plans.length + 1 };
+    const row = { name: String(f.get('name')).trim(), code: String(f.get('code')).trim().toLowerCase(), description: String(f.get('description')).trim(), original_price: +f.get('original_price'), discount_percent: +f.get('discount_percent'), price: +f.get('price'), duration_days: +f.get('duration_days'), max_sites: +f.get('max_sites'), max_products: +f.get('max_products'), features: [], active: true, sort_order: plans.length + 1 };
     const { error } = await sb.from('subscription_plans').insert(row);
     if (error) { msg.textContent = 'تعذر إضافة الباقة: ' + error.message; return; }
     window._adminTab = 'plans'; route();
@@ -316,11 +323,13 @@ async function admin(m) {
       const p = plans.find(x => x.id === b.dataset.id); if (!p) return;
       const name = prompt('اسم الباقة:', p.name); if (name === null) return;
       const description = prompt('الوصف والمميزات:', p.description || ''); if (description === null) return;
-      const price = Number(prompt('السعر بالجنيه:', String(p.price))); if (!Number.isFinite(price) || price < 0) { msg.textContent = 'السعر غير صحيح.'; return; }
+      const original_price = Number(prompt('السعر قبل الخصم:', String(p.original_price ?? p.price))); if (!Number.isFinite(original_price) || original_price < 0) { msg.textContent = 'السعر غير صحيح.'; return; }
+      const discount_percent = Number(prompt('الخصم بالنسبة المئوية (0 إلى 100):', String(p.discount_percent || 0))); if (!Number.isInteger(discount_percent) || discount_percent < 0 || discount_percent > 100) { msg.textContent = 'نسبة الخصم لازم تكون من 0 إلى 100.'; return; }
+      const price = +(original_price * (1 - discount_percent / 100)).toFixed(2);
       const duration_days = Number(prompt('مدة الاشتراك بالأيام:', String(p.duration_days))); if (!Number.isInteger(duration_days) || duration_days < 1 || duration_days > 3650) { msg.textContent = 'المدة لازم تكون من يوم إلى 3650 يوم.'; return; }
       const max_sites = Number(prompt('عدد المواقع (-1 لغير محدود):', String(p.max_sites))); if (!Number.isInteger(max_sites) || max_sites < -1) { msg.textContent = 'حد المواقع غير صحيح.'; return; }
       const max_products = Number(prompt('عدد المنتجات (-1 لغير محدود):', String(p.max_products))); if (!Number.isInteger(max_products) || max_products < -1) { msg.textContent = 'حد المنتجات غير صحيح.'; return; }
-      r = await sb.from('subscription_plans').update({ name: name.trim(), description: description.trim(), price, duration_days, max_sites, max_products, updated_at: new Date().toISOString() }).eq('id', p.id);
+      r = await sb.from('subscription_plans').update({ name: name.trim(), description: description.trim(), original_price, discount_percent, price, duration_days, max_sites, max_products, updated_at: new Date().toISOString() }).eq('id', p.id);
       if (!r.error) window._adminTab = 'plans';
     }
     else if (a === 'pdel') { if (!confirm('حذف الباقة نهائيًا؟ لو عليها حسابات مشتركة، لازم تخفيها بدل حذفها.')) return; r = await sb.rpc('admin_delete_subscription_plan', { p_plan: b.dataset.id }); if (!r.error) window._adminTab = 'plans'; }
@@ -451,12 +460,12 @@ async function builder(m, id) {
       case 'image': return (okUrl(b.url, U_HTTPS) ? '<img class="th" src="' + esc(b.url) + '" alt="">' : '') + up(i, 'url', 'image/jpeg,image/png,image/webp', 'image', 'رفع صورة (JPG أو PNG أو WEBP)') + libPick(i, 'single') + inp(i, 'url', 'أو رابط الصورة (https)', b.url, true) + inp(i, 'alt', 'وصف الصورة', b.alt);
       case 'video': return up(i, 'url', 'video/mp4', 'video', 'رفع فيديو (MP4 حتى 20 ميجا)') + inp(i, 'url', 'أو رابط فيديو MP4 (https)', b.url, true);
       case 'button': return inp(i, 'label', 'نص الزر', b.label, false, 'maxlength="60"') + inp(i, 'url', 'الرابط (https أو tel: أو mailto:)', b.url, true) + up(i, 'url', 'application/pdf', 'application', 'أو ارفع ملف PDF للزر');
-      case 'gallery': return '<div class="ths">' + arr(b.urls).map((x, j) => '<span><img class="th" src="' + esc(x) + '" alt=""><button type="button" class="btn sm warn" data-gdel="' + j + '" data-i="' + i + '">x</button></span>').join('') + '</div>' + libPick(i, 'gallery') + up(i, 'urls', 'image/jpeg,image/png,image/webp', 'image', 'إضافة صور (حتى 12)', true);
+      case 'gallery': return '<div class="ths">' + arr(b.urls).map((x, j) => '<span draggable="true" data-gdrag="' + i + ':' + j + '" data-gpos="' + j + '" data-i="' + i + '"><img class="th" src="' + esc(x) + '" alt=""><button type="button" class="btn sm warn" data-gdel="' + j + '" data-i="' + i + '">×</button></span>').join('') + '</div>' + libPick(i, 'gallery') + up(i, 'urls', 'image/jpeg,image/png,image/webp', 'image', 'إضافة صور (حتى 12)', true);
       case 'faq': return items(b, i, 'q', 'a', 'السؤال', 'الإجابة');
       case 'reviews': return items(b, i, 'name', 'text', 'اسم العميل', 'نص التقييم');
       case 'announce': return inp(i, 'text', 'نص الشريط', b.text, false, 'maxlength="120"') + inp(i, 'url', 'رابط (اختياري)', b.url, true);
       case 'trust': return items(b, i, 'name', 'text', 'العنوان', 'الوصف');
-      case 'slider': return '<div class="ths">' + arr(b.urls).map((x, j) => '<span><img class="th" src="' + esc(x) + '" alt=""><button type="button" class="btn sm warn" data-gdel="' + j + '" data-i="' + i + '">x</button></span>').join('') + libPick(i, 'slider') + up(i, 'urls', 'image/jpeg,image/png,image/webp', 'image', 'أضف صور البانر (حتى 6)', true);
+      case 'slider': return '<div class="ths">' + arr(b.urls).map((x, j) => '<span draggable="true" data-gdrag="' + i + ':' + j + '" data-gpos="' + j + '" data-i="' + i + '"><img class="th" src="' + esc(x) + '" alt=""><button type="button" class="btn sm warn" data-gdel="' + j + '" data-i="' + i + '">×</button></span>').join('') + libPick(i, 'slider') + up(i, 'urls', 'image/jpeg,image/png,image/webp', 'image', 'أضف صور البانر (حتى 6)', true);
       case 'cats': return '<p class="hint">بتظهر أقسام المتجر تلقائيًا بصور من منتجاتك.</p>';
       case 'map': return inp(i, 'url', 'رابط الخريطة (قيمة src من Embed a map في Google Maps)', b.url, true);
     }
@@ -470,8 +479,8 @@ async function builder(m, id) {
   const add = k => { if (blocks.length >= 40) { st('وصلت للحد الأقصى (40 عنصر).'); return; } blocks.push(BLOCKS[k].d()); draw(); };
 
   m.addEventListener('dragstart', e => {
-    const n = e.target.closest && e.target.closest('[data-new]'), h = e.target.closest && e.target.closest('.bh');
-    if (n) e.dataTransfer.setData('text/plain', 'new:' + n.dataset.new); else if (h) e.dataTransfer.setData('text/plain', 'move:' + h.dataset.i);
+    const n = e.target.closest && e.target.closest('[data-new]'), h = e.target.closest && e.target.closest('.bh'), g = e.target.closest && e.target.closest('[data-gdrag]');
+    if (n) e.dataTransfer.setData('text/plain', 'new:' + n.dataset.new); else if (g) e.dataTransfer.setData('text/plain', 'image:' + g.dataset.gdrag); else if (h) e.dataTransfer.setData('text/plain', 'move:' + h.dataset.i);
   });
   cv.addEventListener('dragover', e => e.preventDefault());
   cv.addEventListener('drop', e => {
@@ -479,6 +488,18 @@ async function builder(m, id) {
     const d = e.dataTransfer.getData('text/plain'), t = e.target.closest('.blk');
     let at = t ? +t.dataset.i : blocks.length;
     if (d.startsWith('new:') && BLOCKS[d.slice(4)] && blocks.length < 40) blocks.splice(at, 0, BLOCKS[d.slice(4)].d());
+    else if (d.startsWith('image:') && t) {
+      const [fromI, fromJ] = d.slice(6).split(':').map(Number), src = blocks[fromI], dst = blocks[at];
+      if (!src || !dst || !['gallery','slider'].includes(src.type) || !['gallery','slider'].includes(dst.type)) return;
+      const from = arr(src.urls), to = arr(dst.urls), cap = dst.type === 'slider' ? 6 : 12;
+      if (src !== dst && to.length >= cap) { st('المعرض وصل للحد الأقصى من الصور.'); return; }
+      const [url] = from.splice(fromJ, 1); if (!url) return;
+      const posEl = e.target.closest('[data-gpos]');
+      let pos = posEl && +posEl.dataset.i === at ? +posEl.dataset.gpos : to.length;
+      if (src === dst && fromJ < pos) pos--;
+      to.splice(Math.max(0, Math.min(pos, to.length)), 0, url);
+      src.urls = from; dst.urls = to;
+    }
     else if (d.startsWith('move:')) { const from = +d.slice(5), [x] = blocks.splice(from, 1); if (!x) return; if (at > from) at--; blocks.splice(at, 0, x); }
     draw();
   });
@@ -531,14 +552,22 @@ function terms(m) {
   m.innerHTML = '<section class="wrap"><h1>شروط الاستخدام</h1><p>باستخدامك ' + esc(C.PLATFORM_NAME) + ' فأنت توافق على الآتي:</p><ol><li>أنت المسؤول عن محتوى موقعك وصحته، وعن أي صور أو فيديوهات ترفعها.</li><li>يُمنع نشر أي محتوى مخالف للقانون، أو مسيء، أو ينتهك حقوق الآخرين، أو يتضمن احتيالاً.</li><li>من حق إدارة المنصة إيقاف أو حذف أي موقع أو تعطيل أي حساب يخالف هذه الشروط، دون إخطار مسبق.</li><li>التجربة المجانية مدتها 3 أيام، وتعرض إعلانات على المواقع المجانية.</li><li>الاشتراكات المدفوعة غير قابلة للاسترداد إلا بقرار من الإدارة.</li><li>قد نحدّث هذه الشروط، واستمرارك في الاستخدام يعني موافقتك عليها.</li></ol><p><a href="#/">الرجوع للرئيسية</a></p></section>';
 }
 
-const routes = { '/': home, '/login': login, '/signup': signup, '/dashboard': dashboard, '/admin': admin, '/terms': terms, '/theme': themePage };
+function subscriptionsPage(m) {
+  if (!me) { location.hash = '#/login'; return; }
+  const current = (window.APP_PLANS || []).find(p => p.id === me.subscription_plan_id);
+  const st = status(me), end = me.plan === 'trial' ? me.trial_ends_at : me.plan_ends_at;
+  m.innerHTML = '<section class="wrap"><h1>الاشتراك</h1><article class="current-plan"><div><small>باقتك الحالية</small><h2>' + esc(current ? current.name : (me.plan === 'trial' ? 'التجربة المجانية' : planName(me.plan))) + '</h2><p class="status ' + (st.ok ? 'on' : 'off') + '">' + esc(st.text) + '</p>' + (end ? '<small>تاريخ الانتهاء: ' + new Date(end).toLocaleDateString('ar-EG') + '</small>' : '') + '</div><a class="btn" href="#/dashboard">لوحة مواقعي</a></article>' + payHtml() + '<p class="hint">اختار الباقة المناسبة، حوّل المبلغ، ثم أرسل طلبك. الاشتراك يتفعّل بعد مراجعة الأدمن.</p></section>';
+  m.onclick = e => { const b = e.target.closest('[data-pay]'); if (b) startPay(b.dataset.pay, b); };
+}
+
+const routes = { '/': home, '/login': login, '/signup': signup, '/dashboard': dashboard, '/subscriptions': subscriptionsPage, '/admin': admin, '/terms': terms, '/theme': themePage };
 
 async function loadSettings() {
   try {
     const { data } = await sb.from('app_settings').select('key,value'), g = {};
     (data || []).forEach(x => g[x.key] = x.value);
     window.APP_SETTINGS = g; applyTheme(g);
-    const { data: plans } = await sb.from('subscription_plans').select('id,code,name,description,price,duration_days,max_sites,max_products,ai_uses_monthly,features,active,sort_order').eq('active', true).order('sort_order');
+    const { data: plans } = await sb.from('subscription_plans').select('id,code,name,description,price,original_price,discount_percent,duration_days,max_sites,max_products,ai_uses_monthly,features,active,sort_order').eq('active', true).order('sort_order');
     window.APP_PLANS = plans || [];
     const money = v => /^[0-9]+(\.[0-9]+)?$/.test(String(v || '').trim()) ? Number(v) + ' جنيه' : '';
     if (money(g.price_monthly)) C.PRICE_MONTHLY = money(g.price_monthly);
