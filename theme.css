@@ -57,6 +57,17 @@ form.card.wide{max-width:760px}
 .cat-c img{width:110px;height:110px;object-fit:cover;border-radius:50%;border:3px solid var(--c)}
 /* قوالب المتاجر (skins) */
 .s-logo{max-height:72px;max-width:70%;margin:0 auto 8px;display:block;object-fit:contain}
+.site:not([class*="sk-"]) .s-hero{background:linear-gradient(135deg,color-mix(in srgb,var(--c) 92%,#081b22),color-mix(in srgb,var(--c) 68%,#fff));position:relative;overflow:hidden}
+.site:not([class*="sk-"]) .s-hero:after{content:"";position:absolute;width:320px;height:320px;border:1px solid rgba(255,255,255,.18);border-radius:50%;inset-inline-start:-100px;top:-190px;box-shadow:0 0 0 36px rgba(255,255,255,.04),0 0 0 72px rgba(255,255,255,.035)}
+.site:not([class*="sk-"]) .s-in{position:relative;z-index:1}
+.site:not([class*="sk-"]) .s-body{max-width:1120px;padding-top:48px;padding-bottom:64px}
+.site:not([class*="sk-"]) .b-h{font-size:clamp(1.4rem,3vw,2rem);margin:34px 0 12px}
+.site:not([class*="sk-"]) .b-t{font-size:1.04rem;line-height:1.9;color:var(--tx,#334155)}
+.site:not([class*="sk-"]) .b-trust{margin:20px 0 32px}
+.store-empty{margin:32px 0;padding:48px 24px;text-align:center;background:linear-gradient(145deg,color-mix(in srgb,var(--c) 7%,#fff),#fff);border:1px solid color-mix(in srgb,var(--c) 18%,#fff);border-radius:calc(var(--rs,8px)*2);box-shadow:0 16px 44px rgba(16,32,43,.07)}
+.store-empty-icon{display:grid;place-items:center;width:56px;height:56px;margin:0 auto 12px;background:var(--c);color:var(--t);border-radius:50%;font-size:1.5rem}
+.store-empty h2{margin:0 0 8px;color:var(--ink)}
+.store-empty p{max-width:55ch;margin:0 auto 20px;color:#52626d;line-height:1.8}
 .has-bn .s-hero{background-image:linear-gradient(rgba(0,0,0,.35),rgba(0,0,0,.35)),var(--bn);background-size:cover;background-position:center}
 .b-sld{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;border-radius:var(--rs,8px);margin:12px 0}
 .b-sld img{flex:0 0 100%;scroll-snap-align:center;width:100%;max-height:420px;object-fit:cover}

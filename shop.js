@@ -19,7 +19,14 @@ async function shopSection(site) {
   const { data } = await sb.from('products').select('*').eq('site_id', site.id).eq('active', true).order('created_at');
   const products = data || [], byId = {};
   products.forEach(p => byId[p.id] = p);
-  if (!products.length && !site.booking_enabled) { if (window.storeShell) storeShell(site, [], box); return; }
+  if (!products.length && !site.booking_enabled) {
+    if (site.site_type === 'store') {
+      if (window.storeShell) storeShell(site, [], box);
+      const phone = String(site.phone || '').replace(/[^0-9+]/g, '');
+      box.innerHTML = '<section class="store-empty"><span class="store-empty-icon">✦</span><h2>متجرك جاهز لمنتجاتك</h2><p>أضف أول منتج من لوحة إدارة الموقع، وسيظهر هنا للزوار مع السعر وخيار الطلب.</p>' + (phone ? '<a class="s-btn" href="tel:' + phone + '">استفسر عن المنتجات</a>' : '') + '</section>';
+    }
+    return;
+  }
   const today = new Date().toISOString().slice(0, 10);
   const cats = [...new Set(products.map(p => p.category).filter(Boolean))];
 

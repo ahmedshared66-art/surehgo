@@ -120,13 +120,32 @@ const TEMPLATES = {
   personal:[['نبذة عني','مرحباً بك في موقعي الشخصي.'],['أعمالي','نماذج من أعمالي وخبراتي.'],['تواصل معي','يسعدني التواصل معك.']],
   hotel:[['غرفنا','غرف مريحة بخدمات متكاملة لإقامة هادئة.'],['المرافق','اسأل عن المرافق والخدمات المتاحة.'],['احجز إقامتك','للحجز والاستفسار تواصل معنا مباشرة.']]
 };
+const STARTER_COPY = {
+  restaurant:{lead:'أهلاً بيك في مطعمنا',text:'اكتشف أطباقنا واستمتع بتجربة مميزة.',points:[['طازة كل يوم','نهتم بجودة المكونات والتفاصيل.'],['اختيارات متنوعة','أطباق تناسب أذواق مختلفة.'],['خدمة سريعة','اطلب أو تواصل معنا بسهولة.']],section:'قائمة الطعام'},
+  store:{lead:'اختار اللي يناسبك',text:'تصفح منتجاتنا واكتشف الجديد والعروض المتاحة.',points:[['جودة مضمونة','اختيارات منتقاة بعناية.'],['طلب سهل','اختار منتجاتك وأرسل طلبك مباشرة.'],['توصيل مريح','تواصل معنا لمعرفة مناطق ومواعيد التوصيل.']],section:'تسوق من المتجر'},
+  company:{lead:'حلول تناسب احتياجك',text:'نساعدك بخدمات عملية وخبرة تهتم بتحقيق أفضل نتيجة.',points:[['خبرة متخصصة','فريق يفهم احتياجات مشروعك.'],['حلول واضحة','خدمات مصممة حسب طلبك.'],['تواصل مباشر','اطلب استشارة أو عرض سعر.']],section:'خدماتنا'},
+  clinic:{lead:'رعايتك تبدأ من هنا',text:'نقدم رعاية طبية باهتمام وراحة في كل خطوة.',points:[['رعاية متخصصة','خدمات تناسب احتياجاتك.'],['مواعيد مرنة','تواصل معنا لاختيار الموعد المناسب.'],['اهتمام براحتك','فريق يرافقك من أول زيارة.']],section:'خدماتنا الطبية'},
+  school:{lead:'مستقبل يبدأ بالتعلم',text:'بيئة تعليمية تشجع على المعرفة وتنمية المهارات.',points:[['تعليم متوازن','نهتم بالعلم والمهارات معًا.'],['مراحل متنوعة','تعرف على البرامج والمراحل المتاحة.'],['تواصل مع الإدارة','اسأل عن التقديم والمواعيد.']],section:'البرامج التعليمية'},
+  personal:{lead:'أهلاً بك في مساحتي',text:'هنا أشارك نبذة عن خبراتي وأعمالي وما أقدمه.',points:[['خبرتي','تعرف على مجالات عملي.'],['أعمالي','شاهد نماذج من مشاريعي.'],['تواصل معي','يسعدني استقبال رسالتك.']],section:'نبذة عني'},
+  hotel:{lead:'إقامة مريحة تبدأ هنا',text:'اكتشف مكانًا مناسبًا لإقامة هادئة وخدمة تهتم براحتك.',points:[['غرف مريحة','اختيارات تناسب احتياجات إقامتك.'],['خدمات متكاملة','اسأل عن المرافق والخدمات.'],['حجز سهل','تواصل معنا للاستعلام عن التوافر.']],section:'إقامتك'}
+};
+function starterContent(type, siteName, description, phone) {
+  const x = STARTER_COPY[type] || STARTER_COPY.company, desc = String(description || '').trim();
+  const tel = String(phone || '').replace(/[^0-9+]/g, '');
+  const blocks = [{type:'heading',text:x.lead},{type:'text',text:desc || x.text},{type:'trust',items:x.points.map(([name,text])=>({name,text}))},{type:'heading',text:x.section}];
+  if (type === 'store') blocks.push({type:'cats'},{type:'text',text:'أضف منتجاتك من لوحة إدارة الموقع لتظهر هنا مع الأسعار وإمكانية الطلب.'});
+  else blocks.push({type:'text',text:desc || ('يسعدنا أن تكون ' + String(siteName || '').trim() + ' اختيارك. ' + x.text)});
+  blocks.push({type:'heading',text:'تواصل معنا'},{type:'text',text:tel ? 'اتصل بنا أو راسلنا وسنساعدك.' : 'أضف رقم هاتفك وطرق التواصل من بيانات الموقع.'});
+  if (tel) blocks.push({type:'button',label:'اتصل بنا',url:'tel:' + tel});
+  return blocks;
+}
 const BASE = (() => { const p = location.pathname, i = p.indexOf('/s/'); return i >= 0 ? p.slice(0, i + 1) : p.replace(/[^/]*$/, ''); })();
 const siteUrl = slug => location.origin + BASE + 's/' + slug;
 const pathSlug = () => { try { const p = decodeURIComponent(location.pathname); return p.startsWith(BASE + 's/') ? p.slice(BASE.length + 2).split('/')[0].toLowerCase() : ''; } catch { return ''; } };
 const safeCol = c => /^#[0-9a-f]{6}$/i.test(c || '') ? c : '#0B5C6B';
 const lum = c => { const n = parseInt(c.slice(1), 16); return ((n >> 16) * 299 + (n >> 8 & 255) * 587 + (n & 255) * 114) / 1000; };
-const siteErr = (e, action = 'create') => e.code === '23505' ? 'الرابط ده مستخدم. اختار اسم تاني.'
-  : e.code === '42501' ? (action === 'update' ? 'قاعدة البيانات رفضت حفظ التعديل بسبب صلاحيات الموقع. شغّل ملف إصلاح صلاحيات المواقع من Supabase ثم حدّث الصفحة.' : 'قاعدة البيانات رفضت إنشاء الموقع بسبب صلاحيات قديمة. شغّل ملف إصلاح صلاحيات المواقع من Supabase ثم حدّث الصفحة.')
+const siteErr = e => e.code === '23505' ? 'الرابط ده مستخدم. اختار اسم تاني.'
+  : e.code === '42501' ? 'قاعدة البيانات رفضت إنشاء الموقع بسبب صلاحيات قديمة. شغّل ملف إصلاح حد المواقع من Supabase ثم حدّث الصفحة.'
   : /site_limit_reached/.test(e.message || '') ? 'وصلت للحد الأقصى لعدد المواقع في باقتك.'
   : /subscription_expired/.test(e.message || '') ? 'انتهى اشتراكك. جدّده لإنشاء موقع جديد.'
   : e.code === '23514' ? 'تأكد من البيانات: الرابط بحروف إنجليزية صغيرة وأرقام وشرطة فقط (من 3 إلى 30 حرف).'
@@ -139,8 +158,10 @@ async function siteView(slug) {
   document.title = data.name;
   const ph = (data.phone || '').replace(/[^0-9+]/g, '');
   const ST = siteTheme(data.theme);
-  root.innerHTML = '<div class="site' + ST.cls + '" style="--c:' + esc(safeCol(data.color)) + ';--t:' + (lum(safeCol(data.color)) > 150 ? '#10202B' : '#fff') + esc(ST.style) + '"><header class="s-hero"><div class="s-in">' + ST.logo + '<h1>' + esc(data.name) + '</h1><p>' + esc(data.description) + '</p>' + (ph ? '<a class="s-btn" href="tel:' + ph + '">اتصل بنا</a>' : '') + '</div></header><main class="s-body">' +
-    (arr(data.content).length ? arr(data.content).map(renderBlock).join('') : (TEMPLATES[data.site_type] || []).map(x => '<section><h2>' + x[0] + '</h2><p>' + x[1] + '</p></section>').join('')) + ST.gallery +
+  const liveBlocks = arr(data.content).length ? arr(data.content) : starterContent(data.site_type, data.name, data.description, data.phone);
+  const starter = STARTER_COPY[data.site_type] || STARTER_COPY.company;
+  root.innerHTML = '<div class="site' + ST.cls + '" style="--c:' + esc(safeCol(data.color)) + ';--t:' + (lum(safeCol(data.color)) > 150 ? '#10202B' : '#fff') + esc(ST.style) + '"><header class="s-hero"><div class="s-in">' + ST.logo + '<h1>' + esc(data.name) + '</h1><p>' + esc(data.description || starter.text) + '</p>' + (ph ? '<a class="s-btn" href="tel:' + ph + '">اتصل بنا</a>' : '') + '</div></header><main class="s-body">' +
+    liveBlocks.map(renderBlock).join('') + ST.gallery +
     '<div id="shop-box"></div></main><footer class="s-foot">' + (ph ? '<div dir="ltr">' + esc(ph) + '</div>' : '') + '<a href="' + esc(BASE) + '">Powered by ' + esc(C.PLATFORM_NAME) + '</a></footer></div>';
   shopSection(data);
   siteExtras(data);
@@ -169,15 +190,18 @@ async function dashboard(m) {
   const canCreate = s.ok && (siteLimit === -1 || sites.length < siteLimit);
   m.innerHTML = '<section class="wrap"><h1>أهلاً ' + esc(me.full_name) + '</h1><div class="status ' + (s.ok ? 'on' : 'off') + '">' + esc(s.text) + '</div>' + (pend.length ? '<div class="banner pend">طلب الاشتراك' + (pend[0].plan_name || (pend[0].plan ? ' ' + planName(pend[0].plan) : '')) + ' بانتظار تأكيد الأدمن. هيتفعّل بعد مراجعة التحويل.</div>' : '') + '<p><a class="btn" href="#/subscriptions">عرض الاشتراكات وتفاصيل باقتي</a></p>' +
     '<h2>مواقعي</h2>' + (sites.length ? '<ul class="mysites">' + sites.map(x => '<li><div><b>' + esc(x.name) + '</b> <small>(' + TYPE_NAMES[x.site_type] + (x.status === 'suspended' ? ' - موقوف من الإدارة' : '') + ')</small><br><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(siteUrl(x.slug)) + '</a></div><div class="act"><a class="btn sm" href="#/builder/' + x.id + '">بناء الموقع</a><a class="btn sm ghost" href="#/edit/' + x.id + '">البيانات</a><a class="btn sm ghost" href="#/manage/' + x.id + '">المتجر والطلبات</a><button class="btn sm warn" data-del="' + x.id + '">حذف</button></div></li>').join('') + '</ul>' : '<p>لسه معندكش مواقع.</p>') +
-    (canCreate ? '<h2>إنشاء موقع جديد</h2><form class="card" id="nf"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80"></label><label>الرابط (حروف إنجليزية صغيرة وأرقام وشرطة)<input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,29}" maxlength="30" placeholder="my-restaurant"></label><label>نوع النشاط<select name="type">' + Object.keys(TYPE_NAMES).map(k => '<option value="' + k + '">' + TYPE_NAMES[k] + '</option>').join('') + '</select></label>' + (tpls.length ? '<label>ابدأ من قالب جاهز<select name="tpl"><option value="">بدون قالب (موقع فاضي)</option>' + tpls.map(t => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join('') + '</select></label>' : '') + '<label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600"></textarea></label><label>اللون المفضل<input type="color" name="color" value="#0B5C6B"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20"></label><button class="btn">إنشاء الموقع</button><div class="msg" role="alert"></div></form>'
+    (canCreate ? '<h2>إنشاء موقع جديد</h2><form class="card" id="nf"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80"></label><label>الرابط (حروف إنجليزية صغيرة وأرقام وشرطة)<input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,29}" maxlength="30" placeholder="my-restaurant"></label><label>نوع النشاط<select name="type">' + Object.keys(TYPE_NAMES).map(k => '<option value="' + k + '">' + TYPE_NAMES[k] + '</option>').join('') + '</select></label>' + (tpls.length ? '<label>ابدأ من قالب جاهز<select name="tpl"><option value="">تصميم تلقائي مناسب للنشاط</option>' + tpls.map(t => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join('') + '</select></label>' : '') + '<label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600"></textarea></label><label>اللون المفضل<input type="color" name="color" value="#0B5C6B"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20"></label><button class="btn">إنشاء الموقع</button><div class="msg" role="alert"></div></form>'
       : '<p class="msg">' + (s.ok ? 'وصلت للحد الأقصى (' + (siteLimit === -1 ? 'غير محدود' : siteLimit) + ' مواقع).' : 'مينفعش تنشئ مواقع جديدة لأن التجربة أو الاشتراك انتهى.') + '</p>') + '</section>';
   const nf = m.querySelector('#nf');
   if (nf) nf.onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(nf), msg = nf.querySelector('.msg'); msg.textContent = '';
     const tpl = tpls.find(t => t.id === f.get('tpl'));
-    const row = { owner_id: me.id, slug: f.get('slug').trim().toLowerCase(), name: f.get('name').trim(), site_type: (tpl && tpl.site_type) || f.get('type'), description: f.get('description').trim() || (tpl && tpl.description) || '', color: f.get('color'), phone: f.get('phone').trim() };
-    if (tpl) { row.content = arr(tpl.content).slice(0, 40); row.theme = tpl.theme && typeof tpl.theme === 'object' ? tpl.theme : {}; if (/^#[0-9a-f]{6}$/i.test(tpl.color || '')) row.color = tpl.color; }
+    const siteType = (tpl && tpl.site_type) || f.get('type');
+    const siteDescription = f.get('description').trim() || (tpl && tpl.description) || '';
+    const phone = f.get('phone').trim();
+    const row = { owner_id: me.id, slug: f.get('slug').trim().toLowerCase(), name: f.get('name').trim(), site_type: siteType, description: siteDescription, color: f.get('color'), phone, content: tpl && arr(tpl.content).length ? arr(tpl.content).slice(0, 40) : starterContent(siteType, f.get('name').trim(), siteDescription, phone), theme: tpl && tpl.theme && typeof tpl.theme === 'object' && Object.keys(tpl.theme).length ? tpl.theme : { hero:'grad', skin:siteType === 'store' ? 'clan' : '', anim:true } };
+    if (tpl && /^#[0-9a-f]{6}$/i.test(tpl.color || '')) row.color = tpl.color;
     const { error } = await sb.from('sites').insert(row);
     if (error) { msg.textContent = siteErr(error); return; }
     route();
@@ -199,7 +223,7 @@ async function editSite(m, id) {
     e.preventDefault();
     const f = new FormData(e.target), msg = m.querySelector('.msg');
     const { error } = await sb.from('sites').update({ name: f.get('name').trim(), description: f.get('description').trim(), color: f.get('color'), phone: f.get('phone').trim(), whatsapp: f.get('whatsapp').trim(), facebook: f.get('facebook').trim(), instagram: f.get('instagram').trim(), theme: await siteThemeFrom(f, data.theme) }).eq('id', id);
-    if (error) { msg.textContent = error.code === '23514' ? 'تأكد: واتساب أرقام فقط بالكود الدولي، وروابط فيسبوك وإنستجرام تبدأ بـ https://' : siteErr(error, 'update'); return; }
+    if (error) { msg.textContent = error.code === '23514' ? 'تأكد: واتساب أرقام فقط بالكود الدولي، وروابط فيسبوك وإنستجرام تبدأ بـ https://' : siteErr(error); return; }
     location.hash = '#/dashboard';
   };
 }
@@ -491,6 +515,7 @@ async function builder(m, id) {
   const { data: libraryData } = await sb.from('site_asset_library').select('id,title,category,url').eq('active', true).order('created_at', { ascending: false });
   const library = libraryData || [];
   const blocks = arr(data.content).filter(b => b && BLOCKS[b.type]);
+  if (!blocks.length) blocks.push(...starterContent(data.site_type, data.name, data.description, data.phone));
   m.innerHTML = '<section class="bld"><aside class="pal"><h3>العناصر</h3><p class="hint">اسحب العنصر وضعه في الصفحة، أو اضغط عليه.</p>' +
     Object.keys(BLOCKS).map(k => '<button type="button" class="pal-i" draggable="true" data-new="' + k + '">' + BLOCKS[k].n + '</button>').join('') +
     '</aside><div class="cv"><div class="bar"><b>' + esc(data.name) + '</b><span class="grow"></span><span id="st" role="status"></span><button type="button" class="btn ghost" id="ai">إنشاء بالذكاء الاصطناعي</button><button type="button" class="btn" id="save">حفظ</button><a class="btn ghost" href="' + esc(siteUrl(data.slug)) + '" target="_blank">معاينة</a><a class="btn ghost" href="#/dashboard">رجوع</a></div><div id="canvas"></div></div></section>';
@@ -633,6 +658,7 @@ async function loadSettings() {
 }
 
 async function route() {
+  try {
   await loadSettings();
   await loadMe();
   const h = (location.hash.slice(1) || '/').split('?')[0];
@@ -652,6 +678,10 @@ async function route() {
   if (h.startsWith('/manage/')) await manage(main, h.slice(8)); else if (h.startsWith('/builder/')) await builder(main, h.slice(9)); else if (h.startsWith('/edit/')) await editSite(main, h.slice(6)); else await (routes[h] || home)(main);
   const lo = document.getElementById('logout');
   if (lo) lo.onclick = async () => { await sb.auth.signOut(); location.hash = '#/'; route(); };
+  } catch (err) {
+    console.error('Surehgo page render failed:', err);
+    root.innerHTML = '<main class="wrap" style="padding:48px 20px"><h1>تعذر عرض الموقع</h1><p>حصل خطأ أثناء تحميل الصفحة. حدّثها، ولو استمرت المشكلة ابعت نص الخطأ للدعم.</p><details><summary>تفاصيل الخطأ</summary><pre dir="ltr" style="white-space:pre-wrap">' + esc(err && (err.stack || err.message) || err) + '</pre></details></main>';
+  }
 }
 sb.auth.onAuthStateChange(async ev => {
   if (ev !== 'PASSWORD_RECOVERY') return;
