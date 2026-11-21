@@ -116,7 +116,8 @@ async function siteView(slug) {
   const ph = (data.phone || '').replace(/[^0-9+]/g, '');
   root.innerHTML = '<div class="site" style="--c:' + esc(data.color) + ';--t:' + (lum(data.color) > 150 ? '#10202B' : '#fff') + '"><header class="s-hero"><h1>' + esc(data.name) + '</h1><p>' + esc(data.description) + '</p>' + (ph ? '<a class="s-btn" href="tel:' + ph + '">اتصل بنا</a>' : '') + '</header><main class="s-body">' +
     (arr(data.content).length ? arr(data.content).map(renderBlock).join('') : (TEMPLATES[data.site_type] || []).map(x => '<section><h2>' + x[0] + '</h2><p>' + x[1] + '</p></section>').join('')) +
-    '</main><footer class="s-foot">' + (ph ? '<div dir="ltr">' + esc(ph) + '</div>' : '') + '<a href="#/">Powered by ' + esc(C.PLATFORM_NAME) + '</a></footer></div>';
+    '<div id="shop-box"></div></main><footer class="s-foot">' + (ph ? '<div dir="ltr">' + esc(ph) + '</div>' : '') + '<a href="#/">Powered by ' + esc(C.PLATFORM_NAME) + '</a></footer></div>';
+  shopSection(data);
 }
 
 async function dashboard(m) {
@@ -126,7 +127,7 @@ async function dashboard(m) {
   const sites = data || [];
   const canCreate = s.ok && sites.length < 3;
   m.innerHTML = '<section class="wrap"><h1>أهلاً ' + esc(me.full_name) + '</h1><div class="status ' + (s.ok ? 'on' : 'off') + '">' + esc(s.text) + '</div>' +
-    '<h2>مواقعي</h2>' + (sites.length ? '<ul class="mysites">' + sites.map(x => '<li><div><b>' + esc(x.name) + '</b> <small>(' + TYPE_NAMES[x.site_type] + (x.status === 'suspended' ? ' - موقوف من الإدارة' : '') + ')</small><br><a href="#/s/' + esc(x.slug) + '" target="_blank" dir="ltr">' + esc(siteUrl(x.slug)) + '</a></div><div class="act"><a class="btn sm" href="#/builder/' + x.id + '">بناء الموقع</a><a class="btn sm ghost" href="#/edit/' + x.id + '">البيانات</a><button class="btn sm warn" data-del="' + x.id + '">حذف</button></div></li>').join('') + '</ul>' : '<p>لسه معندكش مواقع.</p>') +
+    '<h2>مواقعي</h2>' + (sites.length ? '<ul class="mysites">' + sites.map(x => '<li><div><b>' + esc(x.name) + '</b> <small>(' + TYPE_NAMES[x.site_type] + (x.status === 'suspended' ? ' - موقوف من الإدارة' : '') + ')</small><br><a href="#/s/' + esc(x.slug) + '" target="_blank" dir="ltr">' + esc(siteUrl(x.slug)) + '</a></div><div class="act"><a class="btn sm" href="#/builder/' + x.id + '">بناء الموقع</a><a class="btn sm ghost" href="#/edit/' + x.id + '">البيانات</a><a class="btn sm ghost" href="#/manage/' + x.id + '">المتجر والطلبات</a><button class="btn sm warn" data-del="' + x.id + '">حذف</button></div></li>').join('') + '</ul>' : '<p>لسه معندكش مواقع.</p>') +
     (canCreate ? '<h2>إنشاء موقع جديد</h2><form class="card" id="nf"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80"></label><label>الرابط (حروف إنجليزية صغيرة وأرقام وشرطة)<input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,29}" maxlength="30" placeholder="my-restaurant"></label><label>نوع النشاط<select name="type">' + Object.keys(TYPE_NAMES).map(k => '<option value="' + k + '">' + TYPE_NAMES[k] + '</option>').join('') + '</select></label><label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600"></textarea></label><label>اللون المفضل<input type="color" name="color" value="#0B5C6B"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20"></label><button class="btn">إنشاء الموقع</button><div class="msg" role="alert"></div></form>'
       : '<p class="msg">' + (s.ok ? 'وصلت للحد الأقصى (3 مواقع).' : 'مينفعش تنشئ مواقع جديدة لأن التجربة أو الاشتراك انتهى.') + '</p>') + '</section>';
   const nf = m.querySelector('#nf');
@@ -329,7 +330,7 @@ async function route() {
   root.innerHTML = nav() + (notice ? '<div class="banner" role="alert">' + esc(notice) + '</div>' : '') + '<main></main><footer><span>© ' + new Date().getFullYear() + ' ' + esc(C.PLATFORM_NAME) + '</span><a href="#/terms">شروط الاستخدام</a></footer>';
   notice = '';
   const main = root.querySelector('main');
-  if (h.startsWith('/builder/')) await builder(main, h.slice(9)); else if (h.startsWith('/edit/')) await editSite(main, h.slice(6)); else await (routes[h] || home)(main);
+  if (h.startsWith('/manage/')) await manage(main, h.slice(8)); else if (h.startsWith('/builder/')) await builder(main, h.slice(9)); else if (h.startsWith('/edit/')) await editSite(main, h.slice(6)); else await (routes[h] || home)(main);
   const lo = document.getElementById('logout');
   if (lo) lo.onclick = async () => { await sb.auth.signOut(); location.hash = '#/'; route(); };
 }
