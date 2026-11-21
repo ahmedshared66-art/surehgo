@@ -6,7 +6,7 @@ const TH = {
   theme_paper: ['خلفية الصفحات', '#F5F8FA', '--paper'],
   theme_line: ['لون الحدود', '#D5DEE4', '--line']
 };
-const TH_FONTS = ['Cairo', 'Tajawal', 'Almarai', 'IBM Plex Sans Arabic'];
+const TH_FONTS = ['Cairo', 'Tajawal', 'Almarai', 'IBM Plex Sans Arabic', 'Noto Sans Arabic', 'Noto Kufi Arabic', 'Readex Pro', 'Alexandria', 'El Messiri', 'Amiri', 'Reem Kufi', 'Changa', 'Mada', 'Rubik'];
 const TH_PRESETS = [
   { n: 'نيل', c: ['#0B5C6B', '#F2B632', '#10202B', '#F5F8FA', '#D5DEE4'] },
   { n: 'غروب', c: ['#C2410C', '#FBBF24', '#2B1408', '#FFF7ED', '#F3D9C4'] },
@@ -121,3 +121,4 @@ async function siteThemeFrom(f, old) {
   }
   return th;
 }
+
