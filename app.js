@@ -139,14 +139,19 @@ async function dashboard(m) {
   const s = status(me);
   const { data } = await sb.from('sites').select('*').eq('owner_id', me.id).order('created_at', { ascending: false });
   const sites = data || [];
+  let siteLimit = 3;
+  if (me.subscription_plan_id) {
+    const { data: activePlan } = await sb.from('subscription_plans').select('max_sites').eq('id', me.subscription_plan_id).maybeSingle();
+    if (activePlan && Number.isInteger(activePlan.max_sites)) siteLimit = activePlan.max_sites;
+  }
   const tp = await sb.from('site_templates').select('id,name,site_type,description,content,color,theme').eq('active', true).order('created_at');
   const tpls = tp.error ? [] : (tp.data || []);
   let pend = []; if (me.role !== 'super_admin') { try { pend = (await sb.from('payment_requests').select('*').eq('status', 'pending')).data || []; } catch {} }
-  const canCreate = s.ok && sites.length < 3;
+  const canCreate = s.ok && (siteLimit === -1 || sites.length < siteLimit);
   m.innerHTML = '<section class="wrap"><h1>أهلاً ' + esc(me.full_name) + '</h1><div class="status ' + (s.ok ? 'on' : 'off') + '">' + esc(s.text) + '</div>' + (pend.length ? '<div class="banner pend">طلب الاشتراك' + (pend[0].plan ? ' ' + planName(pend[0].plan) : '') + ' بانتظار تأكيد الأدمن. هيتفعّل بعد مراجعة التحويل.</div>' : '') + payHtml() +
     '<h2>مواقعي</h2>' + (sites.length ? '<ul class="mysites">' + sites.map(x => '<li><div><b>' + esc(x.name) + '</b> <small>(' + TYPE_NAMES[x.site_type] + (x.status === 'suspended' ? ' - موقوف من الإدارة' : '') + ')</small><br><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(siteUrl(x.slug)) + '</a></div><div class="act"><a class="btn sm" href="#/builder/' + x.id + '">بناء الموقع</a><a class="btn sm ghost" href="#/edit/' + x.id + '">البيانات</a><a class="btn sm ghost" href="#/manage/' + x.id + '">المتجر والطلبات</a><button class="btn sm warn" data-del="' + x.id + '">حذف</button></div></li>').join('') + '</ul>' : '<p>لسه معندكش مواقع.</p>') +
     (canCreate ? '<h2>إنشاء موقع جديد</h2><form class="card" id="nf"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80"></label><label>الرابط (حروف إنجليزية صغيرة وأرقام وشرطة)<input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,29}" maxlength="30" placeholder="my-restaurant"></label><label>نوع النشاط<select name="type">' + Object.keys(TYPE_NAMES).map(k => '<option value="' + k + '">' + TYPE_NAMES[k] + '</option>').join('') + '</select></label>' + (tpls.length ? '<label>ابدأ من قالب جاهز<select name="tpl"><option value="">بدون قالب (موقع فاضي)</option>' + tpls.map(t => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join('') + '</select></label>' : '') + '<label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600"></textarea></label><label>اللون المفضل<input type="color" name="color" value="#0B5C6B"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20"></label><button class="btn">إنشاء الموقع</button><div class="msg" role="alert"></div></form>'
-      : '<p class="msg">' + (s.ok ? 'وصلت للحد الأقصى (3 مواقع).' : 'مينفعش تنشئ مواقع جديدة لأن التجربة أو الاشتراك انتهى.') + '</p>') + '</section>';
+      : '<p class="msg">' + (s.ok ? 'وصلت للحد الأقصى (' + (siteLimit === -1 ? 'غير محدود' : siteLimit) + ' مواقع).' : 'مينفعش تنشئ مواقع جديدة لأن التجربة أو الاشتراك انتهى.') + '</p>') + '</section>';
   const nf = m.querySelector('#nf');
   if (nf) nf.onsubmit = async e => {
     e.preventDefault();
@@ -182,12 +187,13 @@ async function editSite(m, id) {
 
 async function admin(m) {
   if (!me || me.role !== 'super_admin') { location.hash = '#/'; return; }
-  const [u, st, pr, ss, tp] = await Promise.all([
+  const [u, st, pr, ss, tp, pl] = await Promise.all([
     sb.from('profiles').select('*').order('created_at', { ascending: false }),
     sb.from('sites').select('*').order('created_at', { ascending: false }),
     sb.from('payment_requests').select('*').order('created_at', { ascending: true }),
     sb.from('app_settings').select('*'),
-    sb.from('site_templates').select('*').order('created_at', { ascending: false })
+    sb.from('site_templates').select('*').order('created_at', { ascending: false }),
+    sb.from('subscription_plans').select('*').order('sort_order').order('created_at')
   ]);
   if (u.error || st.error) { m.innerHTML = '<section class="wrap"><div class="msg">' + esc((u.error || st.error).message) + '</div></section>'; return; }
   const users = u.data, sites = st.data, email = {};
@@ -200,12 +206,20 @@ async function admin(m) {
   const runDays = Math.max(0, Math.floor((Date.now() - launch) / 864e5));
   const runTxt = runDays === 0 ? 'من النهاردة' : arDays(runDays);
   const tpls = tp && !tp.error ? tp.data : [];
+  const plans = pl && !pl.error ? pl.data : [];
+  const planHtml = '<h2>إضافة باقة</h2>' + (pl && pl.error ? '<p class="msg">شغّل ملف SQL الخاص بالباقات أولًا.</p>' : '') +
+    '<form class="card" id="planf"><label>اسم الباقة<input name="name" required maxlength="80" placeholder="مثال: باقة المتجر"></label>' +
+    '<label>كود داخلي (إنجليزي وأرقام وشرطة)<input name="code" required pattern="[a-z0-9][a-z0-9-]{1,39}" maxlength="40" placeholder="store-pro"></label>' +
+    '<label>وصف ومميزات الباقة<textarea class="rtl" name="description" rows="3" maxlength="500" placeholder="اكتب للعميل ما الذي تتضمنه الباقة"></textarea></label>' +
+    '<div class="thg"><label>السعر بالجنيه<input name="price" type="number" min="0" step="0.01" required></label><label>مدة الباقة بالأيام<input name="duration_days" type="number" min="1" max="3650" value="30" required></label>' +
+    '<label>عدد المواقع المسموح<input name="max_sites" type="number" min="-1" value="1" required></label><label>عدد المنتجات المسموح<input name="max_products" type="number" min="-1" value="0" required></label><label>مرات الذكاء الاصطناعي بالشهر<input name="ai_uses_monthly" type="number" min="-1" value="0" required></label></div>' +
+    '<button class="btn">إضافة الباقة</button></form><h2>الباقات الحالية</h2>' + (plans.length ? '<div class="tbl"><table><tr><th>الباقة</th><th>السعر</th><th>المدة</th><th>حد المواقع</th><th>الحالة</th><th></th></tr>' + plans.map(x => '<tr><td><b>' + esc(x.name) + '</b><br><small>' + esc(x.description) + '</small></td><td>' + esc(x.price) + ' جنيه</td><td>' + esc(x.duration_days) + ' يوم</td><td>' + (x.max_sites === -1 ? 'غير محدود' : esc(x.max_sites)) + '</td><td>' + (x.active ? 'متاحة' : 'مخفية') + '</td><td><button type="button" class="btn sm ghost" data-a="pact" data-id="' + esc(x.id) + '" data-v="' + !x.active + '">' + (x.active ? 'إخفاء' : 'إظهار') + '</button></td></tr>').join('') + '</table></div>' : '<p>لسه مفيش باقات.</p>');
   const tplHtml = '<h2>القوالب</h2><p class="hint">عشان تضيف قالب جديد: ابني موقع بالبنّاء زي ما تحب، وبعدين من تبويب المواقع اضغط <b>حفظ كقالب</b>. القالب بيظهر للمستخدمين وهم بينشئوا موقع جديد.</p>' +
     (tp && tp.error ? '<p class="msg">تأكد إنك شغّلت SQL التحكم الكامل.</p>' : tpls.length ?
     '<div class="tbl"><table><tr><th>الاسم</th><th>النوع</th><th>عدد العناصر</th><th>الحالة</th><th>إجراءات</th></tr>' +
     tpls.map(x => '<tr><td>' + esc(x.name) + '</td><td>' + esc(TYPE_NAMES[x.site_type] || '') + '</td><td>' + arr(x.content).length + '</td><td>' + (x.active ? 'ظاهر' : 'مخفي') + '</td><td class="act"><button class="btn sm ghost" data-a="tact" data-id="' + esc(x.id) + '" data-v="' + !x.active + '">' + (x.active ? 'إخفاء' : 'إظهار') + '</button><button class="btn sm warn" data-a="tdel" data-id="' + esc(x.id) + '">حذف</button></td></tr>').join('') + '</table></div>'
     : '<p>لسه مفيش قوالب.</p>');
-  const TABS = [['req', 'طلبات الاشتراك (' + reqs.length + ')'], ['users', 'المستخدمين'], ['sites', 'المواقع'], ['tpl', 'القوالب (' + tpls.length + ')'], ['set', 'الإعدادات والأسعار']];
+  const TABS = [['req', 'طلبات الاشتراك (' + reqs.length + ')'], ['users', 'المستخدمين'], ['plans', 'الباقات'], ['sites', 'المواقع'], ['tpl', 'القوالب (' + tpls.length + ')'], ['set', 'الإعدادات']];
   let curTab = window._adminTab || (reqs.length ? 'req' : 'users');
   if (!TABS.some(t => t[0] === curTab)) curTab = 'users';
   const tabsNav = '<nav class="atabs" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 20px">' +
@@ -228,11 +242,11 @@ async function admin(m) {
     : '<p>مفيش طلبات جديدة.</p>');
   const paid = users.filter(x => x.plan !== 'trial' && x.plan_ends_at && daysLeft(x.plan_ends_at) > 0).length;
   m.innerHTML = '<section class="wrap" style="max-width:1200px"><h1>لوحة الأدمن</h1><div class="stats"><div>المستخدمين: <b>' + users.length + '</b></div><div>مشتركين حالياً: <b>' + paid + '</b></div><div>معطّلين: <b>' + users.filter(x => x.is_disabled).length + '</b></div><div>المواقع: <b>' + sites.length + '</b></div><div>طلبات اشتراك معلّقة: <b>' + reqs.length + '</b></div><div>إيرادات مؤكدة: <b>' + revenue.toLocaleString('ar-EG') + ' جنيه</b></div><div>المنصة شغالة بقالها: <b>' + runTxt + '</b></div></div><div class="msg" id="amsg" role="alert"></div>' +
-    tabsNav + '<div class="tab" id="t-set" hidden>' + setHtml + '</div><div class="tab" id="t-tpl" hidden>' + tplHtml + '</div><div class="tab" id="t-req" hidden>' + reqHtml + '</div>' +
+    tabsNav + '<div class="tab" id="t-set" hidden>' + setHtml + '</div><div class="tab" id="t-plans" hidden>' + planHtml + '</div><div class="tab" id="t-tpl" hidden>' + tplHtml + '</div><div class="tab" id="t-req" hidden>' + reqHtml + '</div>' +
     '<div class="tab" id="t-users" hidden><h2>المستخدمين</h2><div class="tbl"><table><tr><th>الاسم</th><th>البريد</th><th>الهاتف</th><th>الباقة</th><th>الحالة</th><th>تاريخ التسجيل</th><th>إجراءات</th></tr>' +
-    users.map(x => '<tr><td>' + esc(x.full_name) + '</td><td dir="ltr">' + esc(x.email) + '</td><td dir="ltr">' + esc(x.phone) + '</td><td>' + planName(x.plan) + (x.role === 'super_admin' ? ' (أدمن)' : '') + '</td><td>' + esc(status(x).text) + (x.is_disabled ? ' - معطّل' : '') + '</td><td>' + new Date(x.created_at).toLocaleDateString('ar-EG') + '</td><td class="act">' +
+    users.map(x => '<tr><td>' + esc(x.full_name) + '</td><td dir="ltr">' + esc(x.email) + '</td><td dir="ltr">' + esc(x.phone) + '</td><td>' + esc((plans.find(p => p.id === x.subscription_plan_id) || {}).name || planName(x.plan)) + (x.role === 'super_admin' ? ' (أدمن)' : '') + '</td><td>' + esc(status(x).text) + (x.is_disabled ? ' - معطّل' : '') + '</td><td>' + new Date(x.created_at).toLocaleDateString('ar-EG') + '</td><td class="act">' +
     (x.id === me.id ? '' : '<button class="btn sm ' + (x.is_disabled ? '' : 'warn') + '" data-a="dis" data-id="' + x.id + '" data-v="' + !x.is_disabled + '">' + (x.is_disabled ? 'تفعيل الحساب' : 'تعطيل') + '</button>') +
-    '<button class="btn sm" data-a="plan" data-id="' + x.id + '" data-p="monthly" data-d="30">شهري 30 يوم</button><button class="btn sm" data-a="plan" data-id="' + x.id + '" data-p="yearly" data-d="365">سنوي 365 يوم</button><button class="btn sm ghost" data-a="plan" data-id="' + x.id + '" data-p="trial" data-d="3">تجربة +3 أيام</button></td></tr>').join('') + '</table></div>' +
+    '<button class="btn sm" data-a="assign" data-id="' + x.id + '">إسناد باقة</button><button class="btn sm ghost" data-a="plan" data-id="' + x.id + '" data-p="trial" data-d="3">تجربة +3 أيام</button></td></tr>').join('') + '</table></div>' +
     '</div><div class="tab" id="t-sites" hidden><h2>المواقع</h2><div class="tbl"><table><tr><th>الموقع</th><th>الرابط</th><th>النوع</th><th>صاحب الموقع</th><th>الحالة</th><th>إجراءات</th></tr>' +
     (sites.length ? sites.map(x => '<tr><td>' + esc(x.name) + '</td><td><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(x.slug) + '</a></td><td>' + TYPE_NAMES[x.site_type] + '</td><td dir="ltr">' + esc(email[x.owner_id] || '') + '</td><td>' + (x.status === 'active' ? 'شغال' : 'موقوف') + '</td><td class="act"><button class="btn sm ' + (x.status === 'active' ? 'warn' : '') + '" data-a="site" data-id="' + x.id + '" data-s="' + (x.status === 'active' ? 'suspended' : 'active') + '">' + (x.status === 'active' ? 'إيقاف' : 'تشغيل') + '</button><button class="btn sm ghost" data-a="tpl" data-id="' + x.id + '">حفظ كقالب</button><button class="btn sm warn" data-a="sdel" data-id="' + x.id + '">حذف</button></td></tr>').join('') : '<tr><td colspan="6">مفيش مواقع لسه.</td></tr>') + '</table></div></div></section>';
   const showTab = t => {
@@ -265,11 +279,29 @@ async function admin(m) {
     if (r.error) { msg.textContent = r.error.message; return; }
     route();
   };
+  const pf = m.querySelector('#planf');
+  if (pf) pf.onsubmit = async e => {
+    e.preventDefault(); const f = new FormData(pf), msg = document.getElementById('amsg');
+    const row = { name: String(f.get('name')).trim(), code: String(f.get('code')).trim().toLowerCase(), description: String(f.get('description')).trim(), price: +f.get('price'), duration_days: +f.get('duration_days'), max_sites: +f.get('max_sites'), max_products: +f.get('max_products'), ai_uses_monthly: +f.get('ai_uses_monthly'), features: [], active: true, sort_order: plans.length + 1 };
+    const { error } = await sb.from('subscription_plans').insert(row);
+    if (error) { msg.textContent = 'تعذر إضافة الباقة: ' + error.message; return; }
+    window._adminTab = 'plans'; route();
+  };
   m.onclick = async e => {
     const b = e.target.closest('button'); if (!b) return;
     const msg = document.getElementById('amsg'); msg.textContent = '';
     const a = b.dataset.a; let r;
     if (a === 'dis') r = await sb.rpc('admin_set_disabled', { target: b.dataset.id, disabled: b.dataset.v === 'true' });
+    else if (a === 'pact') { r = await sb.from('subscription_plans').update({ active: b.dataset.v === 'true', updated_at: new Date().toISOString() }).eq('id', b.dataset.id); if (!r.error) window._adminTab = 'plans'; }
+    else if (a === 'assign') {
+      if (!plans.length) { msg.textContent = 'أضف باقة أولًا من تبويب الباقات.'; return; }
+      const menu = plans.filter(p => p.active).map((p, i) => (i + 1) + ') ' + p.name + ' — ' + p.duration_days + ' يوم').join('\n');
+      const choice = prompt('اختار رقم الباقة:\n' + menu); if (choice === null) return;
+      const p = plans.filter(x => x.active)[Number(choice) - 1]; if (!p) { msg.textContent = 'رقم الباقة غير صحيح.'; return; }
+      const rawDays = prompt('مدة الاشتراك بالأيام:', String(p.duration_days)); if (rawDays === null) return;
+      const days = Number(rawDays); if (!Number.isInteger(days) || days < 1 || days > 3650) { msg.textContent = 'اكتب مدة صحيحة من يوم إلى 3650 يوم.'; return; }
+      r = await sb.rpc('admin_assign_subscription', { p_target: b.dataset.id, p_plan: p.id, p_days: days });
+    }
     else if (a === 'plan') r = await sb.rpc('admin_set_plan', { target: b.dataset.id, new_plan: b.dataset.p, days: +b.dataset.d });
     else if (a === 'rok') {
       r = await sb.rpc('admin_set_plan', { target: b.dataset.u, new_plan: b.dataset.p, days: +b.dataset.d });
