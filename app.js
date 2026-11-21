@@ -145,6 +145,21 @@ function starterContent(type, siteName, description, phone) {
   if (tel) blocks.push({type:'button',label:'اتصل بنا',url:'tel:' + tel});
   return blocks;
 }
+const DESIGN_PRESETS = {
+  modern:{id:'modern',name:'مودرن',note:'تصميم نظيف يناسب كل الأنشطة',hero:'grad',skin:'',color:'#0B5C6B'},
+  glass:{id:'glass',name:'زجاجي',note:'واجهة لامعة وناعمة',hero:'glass',skin:'',color:'#6D28D9'},
+  minimal:{id:'minimal',name:'بسيط وأنيق',note:'مساحات هادئة وتركيز على المحتوى',hero:'solid',skin:'',color:'#1F2937'},
+  clan:{id:'clan',name:'كلان دافئ',note:'متجر مريح بألوان دافئة',hero:'solid',skin:'clan',color:'#0B5C6B'},
+  exemore:{id:'exemore',name:'إكسيمور',note:'كتالوج واضح لمتجر كبير',hero:'solid',skin:'exemore',color:'#1D3557'},
+  defacto:{id:'defacto',name:'ديفاكتو',note:'ستايل بسيط لمتاجر الأزياء',hero:'solid',skin:'defacto',color:'#252525'}
+};
+function designGallery(type, selected) {
+  const keys = type === 'store' ? ['clan','exemore','defacto'] : ['modern','glass','minimal'];
+  return '<div class="design-gallery">' + keys.map(k => {
+    const d = DESIGN_PRESETS[k];
+    return '<label class="design-option' + (selected === k ? ' selected' : '') + '"><input type="radio" name="design" value="' + d.id + '"' + (selected === k ? ' checked' : '') + '><span class="design-mini ' + (d.skin ? 'mini-' + d.skin : 'mini-' + d.hero) + '" style="--mini:' + d.color + '"><i class="mini-nav"></i><i class="mini-hero"></i><i class="mini-products"><b></b><b></b><b></b></i></span><b>' + d.name + '</b><small>' + d.note + '</small></label>';
+  }).join('') + '</div>';
+}
 const BASE = (() => { const p = location.pathname, i = p.indexOf('/s/'); return i >= 0 ? p.slice(0, i + 1) : p.replace(/[^/]*$/, ''); })();
 const siteUrl = slug => location.origin + BASE + 's/' + slug;
 const pathSlug = () => { try { const p = decodeURIComponent(location.pathname); return p.startsWith(BASE + 's/') ? p.slice(BASE.length + 2).split('/')[0].toLowerCase() : ''; } catch { return ''; } };
@@ -173,6 +188,17 @@ async function siteView(slug) {
   shopSection(data);
   siteExtras(data);
   siteEnhance();
+  addOwnerSiteToolbar(data);
+}
+
+async function addOwnerSiteToolbar(site) {
+  try {
+    if (!me) await loadMe();
+    if (!me || me.id !== site.owner_id || document.getElementById('site-owner-toolbar')) return;
+    const bar = document.createElement('div'); bar.id = 'site-owner-toolbar'; bar.className = 'site-owner-toolbar';
+    bar.innerHTML = '<b>أنت بتعاين موقعك</b><span class="grow"></span><a class="btn sm" href="#/builder/' + esc(site.id) + '">تعديل مباشر</a><a class="btn sm ghost" href="#/edit/' + esc(site.id) + '">الإعدادات</a><a class="btn sm ghost" href="#/manage/' + esc(site.id) + '">إدارة المتجر</a>';
+    root.prepend(bar);
+  } catch {}
 }
 
 async function dashboard(m) {
@@ -197,9 +223,14 @@ async function dashboard(m) {
   const canCreate = s.ok && (siteLimit === -1 || sites.length < siteLimit);
   m.innerHTML = '<section class="wrap"><h1>أهلاً ' + esc(me.full_name) + '</h1><div class="status ' + (s.ok ? 'on' : 'off') + '">' + esc(s.text) + '</div>' + (pend.length ? '<div class="banner pend">طلب الاشتراك' + (pend[0].plan_name || (pend[0].plan ? ' ' + planName(pend[0].plan) : '')) + ' بانتظار تأكيد الأدمن. هيتفعّل بعد مراجعة التحويل.</div>' : '') + '<p><a class="btn" href="#/subscriptions">عرض الاشتراكات وتفاصيل باقتي</a></p>' +
     '<h2>مواقعي</h2>' + (sites.length ? '<ul class="mysites">' + sites.map(x => '<li><div><b>' + esc(x.name) + '</b> <small>(' + TYPE_NAMES[x.site_type] + (x.status === 'suspended' ? ' - موقوف من الإدارة' : '') + ')</small><br><a href="' + esc(siteUrl(x.slug)) + '" target="_blank" dir="ltr">' + esc(siteUrl(x.slug)) + '</a></div><div class="act"><a class="btn sm" href="#/builder/' + x.id + '">بناء الموقع</a><a class="btn sm ghost" href="#/edit/' + x.id + '">البيانات</a><a class="btn sm ghost" href="#/manage/' + x.id + '">المتجر والطلبات</a><button class="btn sm warn" data-del="' + x.id + '">حذف</button></div></li>').join('') + '</ul>' : '<p>لسه معندكش مواقع.</p>') +
-    (canCreate ? '<h2>إنشاء موقع جديد</h2><form class="card" id="nf"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80"></label><label>الرابط (حروف إنجليزية صغيرة وأرقام وشرطة)<input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,29}" maxlength="30" placeholder="my-restaurant"></label><label>نوع النشاط<select name="type">' + Object.keys(TYPE_NAMES).map(k => '<option value="' + k + '">' + TYPE_NAMES[k] + '</option>').join('') + '</select></label>' + (tpls.length ? '<label>ابدأ من قالب جاهز<select name="tpl"><option value="">تصميم تلقائي مناسب للنشاط</option>' + tpls.map(t => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join('') + '</select></label>' : '') + '<label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600"></textarea></label><label>اللون المفضل<input type="color" name="color" value="#0B5C6B"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20"></label><button class="btn">إنشاء الموقع</button><div class="msg" role="alert"></div></form>'
+    (canCreate ? '<h2>إنشاء موقع جديد</h2><form class="card" id="nf"><label>اسم الموقع<input class="rtl" name="name" required minlength="2" maxlength="80"></label><label>الرابط (حروف إنجليزية صغيرة وأرقام وشرطة)<input name="slug" required pattern="[a-z0-9][a-z0-9\\-]{2,29}" maxlength="30" placeholder="my-restaurant"></label><label>نوع النشاط<select name="type">' + Object.keys(TYPE_NAMES).map(k => '<option value="' + k + '">' + TYPE_NAMES[k] + '</option>').join('') + '</select></label><div class="design-pick"><b>اختار تصميم البداية</b><p class="hint">هتقدر تغيّر الصور والأقسام والألوان بعد الإنشاء.</p><div id="design-gallery">' + designGallery('restaurant','modern') + '</div></div>' + (tpls.length ? '<label>أو ابدأ من قالب محفوظ<select name="tpl"><option value="">استخدم التصميم المختار</option>' + tpls.map(t => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join('') + '</select></label>' : '') + '<label>وصف النشاط<textarea class="rtl" name="description" rows="3" maxlength="600"></textarea></label><label>اللون المفضل<input type="color" name="color" value="#0B5C6B"></label><label>رقم الهاتف<input name="phone" type="tel" maxlength="20"></label><button class="btn">إنشاء الموقع</button><div class="msg" role="alert"></div></form>'
       : '<p class="msg">' + (s.ok ? 'وصلت للحد الأقصى (' + (siteLimit === -1 ? 'غير محدود' : siteLimit) + ' مواقع).' : 'مينفعش تنشئ مواقع جديدة لأن التجربة أو الاشتراك انتهى.') + '</p>') + '</section>';
   const nf = m.querySelector('#nf');
+  if (nf) {
+    const typeField = nf.querySelector('[name="type"]'), gallery = nf.querySelector('#design-gallery');
+    typeField.onchange = () => { gallery.innerHTML = designGallery(typeField.value, typeField.value === 'store' ? 'clan' : 'modern'); };
+    gallery.onchange = e => { if (!e.target.matches('input[name="design"]')) return; gallery.querySelectorAll('.design-option').forEach(x => x.classList.toggle('selected', x.contains(e.target))); };
+  }
   if (nf) nf.onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(nf), msg = nf.querySelector('.msg'); msg.textContent = '';
@@ -207,7 +238,8 @@ async function dashboard(m) {
     const siteType = (tpl && tpl.site_type) || f.get('type');
     const siteDescription = f.get('description').trim() || (tpl && tpl.description) || '';
     const phone = f.get('phone').trim();
-    const row = { owner_id: me.id, slug: f.get('slug').trim().toLowerCase(), name: f.get('name').trim(), site_type: siteType, description: siteDescription, color: f.get('color'), phone, content: tpl && arr(tpl.content).length ? arr(tpl.content).slice(0, 40) : starterContent(siteType, f.get('name').trim(), siteDescription, phone), theme: tpl && tpl.theme && typeof tpl.theme === 'object' && Object.keys(tpl.theme).length ? tpl.theme : { hero:'grad', skin:siteType === 'store' ? 'clan' : '', anim:true } };
+    const picked = DESIGN_PRESETS[f.get('design')] || DESIGN_PRESETS[siteType === 'store' ? 'clan' : 'modern'];
+    const row = { owner_id: me.id, slug: f.get('slug').trim().toLowerCase(), name: f.get('name').trim(), site_type: siteType, description: siteDescription, color: f.get('color'), phone, content: tpl && arr(tpl.content).length ? arr(tpl.content).slice(0, 40) : starterContent(siteType, f.get('name').trim(), siteDescription, phone), theme: tpl && tpl.theme && typeof tpl.theme === 'object' && Object.keys(tpl.theme).length ? tpl.theme : { hero:picked.hero, skin:picked.skin, anim:true } };
     if (tpl && /^#[0-9a-f]{6}$/i.test(tpl.color || '')) row.color = tpl.color;
     const { error } = await sb.from('sites').insert(row);
     if (error) { msg.textContent = siteErr(error); return; }
@@ -523,10 +555,19 @@ async function builder(m, id) {
   const library = libraryData || [];
   const blocks = arr(data.content).filter(b => b && BLOCKS[b.type]);
   if (!blocks.length) blocks.push(...starterContent(data.site_type, data.name, data.description, data.phone));
-  m.innerHTML = '<section class="bld"><aside class="pal"><h3>العناصر</h3><p class="hint">اسحب العنصر وضعه في الصفحة، أو اضغط عليه.</p>' +
+  m.innerHTML = '<section class="bld live-bld"><aside class="pal"><h3>العناصر</h3><p class="hint">أضف الأقسام أو اسحبها ورتبها. المعاينة بتتحدث قدامك.</p>' +
     Object.keys(BLOCKS).map(k => '<button type="button" class="pal-i" draggable="true" data-new="' + k + '">' + BLOCKS[k].n + '</button>').join('') +
-    '</aside><div class="cv"><div class="bar"><b>' + esc(data.name) + '</b><span class="grow"></span><span id="st" role="status"></span><button type="button" class="btn ghost" id="ai">إنشاء بالذكاء الاصطناعي</button><button type="button" class="btn" id="save">حفظ</button><a class="btn ghost" href="' + esc(siteUrl(data.slug)) + '" target="_blank">معاينة</a><a class="btn ghost" href="#/dashboard">رجوع</a></div><div id="canvas"></div></div></section>';
-  const cv = m.querySelector('#canvas'), st = t => m.querySelector('#st').textContent = t;
+    '</aside><div class="cv"><div class="bar"><b>' + esc(data.name) + '</b><span class="grow"></span><span id="st" role="status"></span><button type="button" class="btn ghost" id="ai">إنشاء بالذكاء الاصطناعي</button><button type="button" class="btn" id="save">حفظ</button><a class="btn ghost" href="' + esc(siteUrl(data.slug)) + '" target="_blank">فتح الموقع</a><a class="btn ghost" href="#/dashboard">رجوع</a></div><div class="builder-grid"><div id="canvas" class="editor-panel"></div><div class="preview-wrap"><div class="preview-head"><b>معاينة مباشرة</b><span class="grow"></span><button type="button" class="btn sm ghost" data-preview="desktop">كمبيوتر</button><button type="button" class="btn sm ghost" data-preview="mobile">موبايل</button></div><div id="preview-window" class="preview-window"><div id="live-preview"></div></div></div></div></div></section>';
+  const cv = m.querySelector('#canvas'), preview = m.querySelector('#live-preview'), previewWindow = m.querySelector('#preview-window'), st = t => m.querySelector('#st').textContent = t;
+  const drawPreview = () => {
+    const ST = siteTheme(data.theme), intro = STARTER_COPY[data.site_type] || STARTER_COPY.company;
+    const phone = String(data.phone || '').replace(/[^0-9+]/g, '');
+    const storeHeader = data.site_type === 'store' && ST.cls.includes('sk-') ? '<header class="sh"><div class="sh-top"><div class="sh-logo">' + (ST.logo || esc(data.name)) + '</div><form class="sh-search"><input placeholder="ابحث عن منتج" disabled></form><div class="sh-act"><button class="sh-cart" type="button">🛒 0</button></div></div><nav class="sh-nav"><button type="button">الرئيسية</button><button type="button">الأقسام</button><button type="button">العروض</button></nav></header>' : '';
+    const sampleProducts = data.site_type === 'store' ? '<section class="shop-preview-shelf"><h2>منتجات المتجر</h2><div class="prods"><article class="prod"><div class="preview-product-art art-a"></div><b>منتج مميز</b><p>وصف قصير للمنتج</p><strong>٢٩٩ جنيه</strong></article><article class="prod"><div class="preview-product-art art-b"></div><b>اختيار العملاء</b><p>تفاصيل المنتج هنا</p><strong>٤٥٠ جنيه</strong></article><article class="prod"><div class="preview-product-art art-c"></div><b>وصل حديثًا</b><p>منتجك يظهر للعميل هنا</p><strong>٣٥٠ جنيه</strong></article></div></section>' : '';
+    preview.className = 'site live-site' + ST.cls;
+    preview.style.cssText = '--c:' + safeCol(data.color) + ';--t:' + (lum(safeCol(data.color)) > 150 ? '#10202B' : '#fff') + ST.style;
+    preview.innerHTML = storeHeader + '<header class="s-hero"><div class="s-in">' + ST.logo + '<h1>' + esc(data.name) + '</h1><p>' + esc(data.description || intro.text) + '</p>' + (phone ? '<a class="s-btn" href="tel:' + phone + '">اتصل بنا</a>' : '') + '</div></header><main class="s-body">' + blocks.map((b,i) => '<div class="preview-block" data-preview-index="' + i + '">' + renderBlock(b) + '</div>').join('') + ST.gallery + sampleProducts + '</main><footer class="s-foot">' + (phone ? '<span dir="ltr">' + esc(phone) + '</span>' : '') + '<span>' + esc(data.name) + '</span></footer>';
+  };
 
   const inp = (i, f, label, v, ltr, extra) => '<label>' + label + '<input' + (ltr ? ' dir="ltr"' : ' class="rtl"') + ' data-i="' + i + '" data-f="' + f + '" value="' + esc(v) + '" ' + (extra || '') + '></label>';
   const up = (i, f, accept, kinds, label, multi) => '<label>' + label + '<input type="file" accept="' + accept + '"' + (multi ? ' multiple' : '') + ' data-up="' + kinds + '" data-i="' + i + '" data-f="' + f + '"></label>';
@@ -553,6 +594,7 @@ async function builder(m, id) {
   function draw() {
     cv.innerHTML = blocks.map((b, i) => '<div class="blk" data-i="' + i + '"><div class="bh" draggable="true" data-i="' + i + '"><span>⠿ ' + BLOCKS[b.type].n + '</span><span><button type="button" data-m="up" data-i="' + i + '">↑</button><button type="button" data-m="down" data-i="' + i + '">↓</button><button type="button" data-m="del" data-i="' + i + '">حذف</button></span></div>' + fields(b, i) + '</div>').join('') +
       '<div class="drop-end">' + (blocks.length ? 'اسحب هنا للإضافة في آخر الصفحة' : 'ابدأ بسحب عنصر من القائمة وضعه هنا') + '</div>';
+    drawPreview();
   }
   draw();
   const add = k => { if (blocks.length >= 40) { st('وصلت للحد الأقصى (40 عنصر).'); return; } blocks.push(BLOCKS[k].d()); draw(); };
@@ -585,6 +627,7 @@ async function builder(m, id) {
   cv.addEventListener('input', e => {
     const t = e.target, b = blocks[+t.dataset.i]; if (!b || t.dataset.f === undefined) return;
     if (t.dataset.j !== undefined) b[t.dataset.f][+t.dataset.j][t.dataset.k] = t.value; else b[t.dataset.f] = t.value;
+    drawPreview();
   });
   cv.addEventListener('change', async e => {
     const t = e.target;
@@ -608,6 +651,10 @@ async function builder(m, id) {
     } catch (er) { st(er.message); }
   });
   m.addEventListener('click', e => {
+    const pv = e.target.closest('[data-preview]');
+    if (pv) { previewWindow.classList.toggle('mobile-preview', pv.dataset.preview === 'mobile'); return; }
+    const blockPreview = e.target.closest('[data-preview-index]');
+    if (blockPreview) { const editorBlock = cv.querySelector('.blk[data-i="' + blockPreview.dataset.previewIndex + '"]'); if (editorBlock) { editorBlock.scrollIntoView({behavior:'smooth',block:'center'}); editorBlock.classList.add('editing'); setTimeout(() => editorBlock.classList.remove('editing'), 1200); } return; }
     const n = e.target.closest('[data-new]'); if (n) { add(n.dataset.new); return; }
     const b = e.target.closest('button'); if (!b) return;
     const i = +b.dataset.i, mv = b.dataset.m;
